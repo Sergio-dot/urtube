@@ -37,12 +37,18 @@ func MakeHandler(h APIFunc) http.HandlerFunc {
 // JSON writes a JSON response with a given status code.
 func JSON(w http.ResponseWriter, status int, data any) {
 	if data != nil {
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		buf, err := json.Marshal(data)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "internal server error")
+			return
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+
+		w.Write(buf)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+
 }
 
 func Error(w http.ResponseWriter, status int, message string) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Sergio-dot/urtube/pkg"
+	"github.com/Sergio-dot/urtube/pkg/strutil"
 	"github.com/lrstanley/go-ytdlp"
 )
 
@@ -12,7 +12,7 @@ func SearchVideo(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	param := r.PathValue("searchParam")
-	if pkg.IsEmpty(param) {
+	if strutil.IsEmpty(param) {
 		return APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
 	}
 
