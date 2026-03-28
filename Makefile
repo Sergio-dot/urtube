@@ -1,6 +1,10 @@
 test:
 	go test ./...
 
+coverage:
+	go test -covermode=atomic -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+
 vet:
 	go vet ./...
 
