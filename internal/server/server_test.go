@@ -40,6 +40,7 @@ func TestServer(t *testing.T) {
 
 		resp, err := http.Get("http://" + s.Addr())
 		assert.NoError(t, err)
+		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
