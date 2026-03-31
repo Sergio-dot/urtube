@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -23,7 +24,8 @@ type APIFunc func(w http.ResponseWriter, r *http.Request) error
 func MakeHandler(h APIFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
-			if apiErr, ok := err.(APIError); ok {
+			var apiErr APIError
+			if errors.As(err, &apiErr) {
 				Error(w, apiErr.StatusCode, apiErr.Message)
 			} else {
 				// unexpected internal error
@@ -36,21 +38,28 @@ func MakeHandler(h APIFunc) http.HandlerFunc {
 
 // JSON writes a JSON response with a given status code.
 func JSON(w http.ResponseWriter, status int, data any) {
-	if data != nil {
-		buf, err := json.Marshal(data)
-		if err != nil {
-			Error(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
 
-		w.Header().Set("Content-Type", "application/json")
+	if data == nil {
 		w.WriteHeader(status)
-
-		w.Write(buf)
+		return
 	}
 
+	buf, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("failed to marshal json: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	if _, err := w.Write(buf); err != nil {
+		log.Printf("failed to write response: %v", err)
+	}
 }
 
+// Error writes an error response with a given status code.
 func Error(w http.ResponseWriter, status int, message string) {
 	JSON(w, status, map[string]string{"error": message})
 }

@@ -8,20 +8,27 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var apiErr = APIError{
-	StatusCode: http.StatusBadRequest,
-	Message:    "bad request",
-}
-
 func TestAPIError(t *testing.T) {
+	apiErr := APIError{
+		StatusCode: http.StatusBadRequest,
+		Message:    "bad request",
+	}
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	assert.Equal(t, "bad request", apiErr.Message)
 }
 
 func TestMakeHandler(t *testing.T) {
 	t.Run("wrap handler", func(t *testing.T) {
-		handlerFunc := MakeHandler(func(w http.ResponseWriter, r *http.Request) error { return nil })
-		assert.NotNil(t, handlerFunc)
+		h := MakeHandler(func(w http.ResponseWriter, r *http.Request) error {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+		h.ServeHTTP(w, r)
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }
 
