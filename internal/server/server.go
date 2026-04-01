@@ -14,12 +14,21 @@ type Server struct {
 	listener net.Listener
 }
 
+var (
+	ErrInvalidAddress = errors.New("invalid address")
+)
+
 // NewServer creates and binds a TCP listener on addr, returning a Server ready to be started.
 func NewServer(addr string, handler http.Handler) (*Server, error) {
+	if addr == "" {
+		return nil, ErrInvalidAddress
+	}
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Server{
 		server: &http.Server{
 			Addr:    addr,
