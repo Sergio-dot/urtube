@@ -35,6 +35,6 @@ func SearchVideo(w http.ResponseWriter, r *http.Request) error {
 		return APIError{StatusCode: http.StatusNotFound, Message: "no results found"}
 	}
 
-	JSON(w, http.StatusOK, searchResults)
+	writeJSON(w, http.StatusOK, searchResults)
 	return nil
 }

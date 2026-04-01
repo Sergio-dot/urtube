@@ -36,30 +36,25 @@ func MakeHandler(h APIFunc) http.HandlerFunc {
 	}
 }
 
-// JSON writes a JSON response with a given status code.
-func JSON(w http.ResponseWriter, status int, data any) {
-
+// writeJSON writes a JSON response with a given status code.
+func writeJSON(w http.ResponseWriter, status int, data any) {
 	if data == nil {
 		w.WriteHeader(status)
-		return
-	}
-
-	buf, err := json.Marshal(data)
-	if err != nil {
-		log.Printf("failed to marshal json: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
-	if _, err := w.Write(buf); err != nil {
-		log.Printf("failed to write response: %v", err)
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		log.Printf("failed to marshal json: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 }
 
 // Error writes an error response with a given status code.
 func Error(w http.ResponseWriter, status int, message string) {
-	JSON(w, status, map[string]string{"error": message})
+	writeJSON(w, status, map[string]string{"error": message})
 }
