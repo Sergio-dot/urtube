@@ -52,7 +52,12 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(buf)
+	_, err = w.Write(buf)
+	if err != nil {
+		log.Printf("failed to write json: %v", err)
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		return
+	}
 }
 
 // Error writes an error response with a given status code.
