@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/Sergio-dot/urtube/internal/router"
+	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/internal/server"
 	"github.com/joho/godotenv"
 )
@@ -19,7 +20,9 @@ func main() {
 	serverHost := os.Getenv("SERVER_HOST")
 	serverPort := os.Getenv("SERVER_PORT")
 
-	router := router.NewRouter()
+	router := router.NewRouter(router.Dependencies{
+		Searcher: &search.YtdlpSearcher{},
+	})
 	srv, err := server.NewServer(fmt.Sprintf("%s:%s", serverHost, serverPort), router)
 	if err != nil {
 		log.Fatalf("%v\n", err)

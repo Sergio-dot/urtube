@@ -11,8 +11,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+type Dependencies struct {
+	Searcher search.Searcher
+}
+
 // NewRouter creates and returns a new HTTP handler with the defined routes.
-func NewRouter() http.Handler {
+func NewRouter(deps Dependencies) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -24,16 +28,16 @@ func NewRouter() http.Handler {
 	r.Use(middleware.Timeout(time.Second * 30))
 	r.Use(middleware.Heartbeat("/healthz"))
 
-	r.Mount("/api/v1", routerV1())
+	r.Mount("/api/v1", routerV1(deps))
 
 	return r
 }
 
 // routerV1 creates and returns a new HTTP handler for the v1 API.
-func routerV1() http.Handler {
+func routerV1(deps Dependencies) http.Handler {
 	v1 := chi.NewRouter()
 
-	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: &search.YtdlpSearcher{}}).SearchVideo))
+	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchVideo))
 
 	return v1
 }
