@@ -51,6 +51,9 @@ func (s *YtdlpSearcher) Search(ctx context.Context, param string) ([]*ytdlp.Extr
 
 		videos = append(videos, result)
 	}
+	if len(videos) == 0 {
+		return nil, ErrNoResults
+	}
 
 	return videos, nil
 }
