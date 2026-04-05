@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/Sergio-dot/urtube/internal/handlers"
+	"github.com/Sergio-dot/urtube/internal/httputils"
+	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -18,8 +20,8 @@ func NewRouter() http.Handler {
 	r.Use(middleware.CleanPath)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(time.Second * 300))
-	r.Use(middleware.Heartbeat("/"))
+	r.Use(middleware.Timeout(time.Second * 30))
+	r.Use(middleware.Heartbeat("/healthz"))
 
 	r.Mount("/api/v1", routerV1())
 
@@ -29,7 +31,7 @@ func NewRouter() http.Handler {
 func routerV1() http.Handler {
 	v1 := chi.NewRouter()
 
-	v1.Get("/search/{searchParam}", handlers.MakeHandler(handlers.SearchVideo))
+	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: &search.YtdlpSearcher{}}).SearchVideo))
 
 	return v1
 }
