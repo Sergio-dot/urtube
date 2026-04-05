@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// SearchHandler is the handler for the search video request
 type SearchHandler struct {
 	Searcher search.Searcher
 }
