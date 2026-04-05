@@ -1,40 +1,34 @@
 package handlers
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
-	"github.com/Sergio-dot/urtube/pkg/strutil"
-	"github.com/lrstanley/go-ytdlp"
+	"github.com/Sergio-dot/urtube/internal/search"
+	"github.com/Sergio-dot/urtube/pkg/httputils"
+	"github.com/Sergio-dot/urtube/pkg/strutils"
+	"github.com/go-chi/chi/v5"
 )
 
-func SearchVideo(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
+type SearchHandler struct {
+	Searcher search.Searcher
+}
 
-	param := r.PathValue("searchParam")
-	if strutil.IsEmpty(param) {
-		return APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
+// SearchVideo handles the search video request
+func (h *SearchHandler) SearchVideo(w http.ResponseWriter, r *http.Request) error {
+	param := chi.URLParam(r, "searchParam")
+	if strutils.IsEmpty(param) {
+		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
 	}
 
-	searchStr := fmt.Sprintf("ytsearch5:%s", param)
-
-	command, err := ytdlp.New().
-		PrintJSON().
-		SkipDownload().
-		FlatPlaylist().
-		Run(ctx, searchStr)
+	videos, err := h.Searcher.Search(r.Context(), param)
 	if err != nil {
-		return fmt.Errorf("failed to run ytdlp: %w", err)
+		if errors.Is(err, search.ErrNoResults) {
+			return httputils.APIError{StatusCode: http.StatusNotFound, Message: err.Error()}
+		}
+		return err
 	}
 
-	searchResults, err := command.GetExtractedInfo()
-	if err != nil {
-		return fmt.Errorf("failed to extract video info: %w", err)
-	}
-	if len(searchResults) == 0 {
-		return APIError{StatusCode: http.StatusNotFound, Message: "no results found"}
-	}
-
-	writeJSON(w, http.StatusOK, searchResults)
+	httputils.WriteJSON(w, http.StatusOK, videos)
 	return nil
 }
