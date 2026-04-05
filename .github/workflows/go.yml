@@ -21,6 +21,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python3 -m pip install -U yt-dlp
+
       - name: Build
         run: go build -v ./...
 
