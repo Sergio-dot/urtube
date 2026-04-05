@@ -1,4 +1,4 @@
-package handlers
+package httputils
 
 import (
 	"errors"
@@ -17,6 +17,8 @@ func TestAPIError(t *testing.T) {
 	}
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	assert.Equal(t, "bad request", apiErr.Message)
+	assert.Equal(t, "bad request", apiErr.Error())
+	assert.Implements(t, (*error)(nil), apiErr)
 }
 
 func TestMakeHandler(t *testing.T) {
@@ -95,7 +97,7 @@ func TestWriteJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			writeJSON(w, tt.status, tt.data)
+			WriteJSON(w, tt.status, tt.data)
 			assert.Equal(t, tt.expectedStatus, w.Code)
 		})
 	}

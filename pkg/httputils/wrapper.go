@@ -1,4 +1,4 @@
-package handlers
+package httputils
 
 import (
 	"encoding/json"
@@ -36,25 +36,26 @@ func MakeHandler(h APIFunc) http.HandlerFunc {
 	}
 }
 
-// writeJSON writes a JSON response with a given status code.
-func writeJSON(w http.ResponseWriter, status int, data any) {
+// WriteJSON writes a JSON response with a given status code.
+func WriteJSON(w http.ResponseWriter, status int, data any) {
 	if data == nil {
 		w.WriteHeader(status)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	err := json.NewEncoder(w).Encode(data)
+	buf, err := json.Marshal(data)
 	if err != nil {
 		log.Printf("failed to marshal json: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(buf)
 }
 
 // Error writes an error response with a given status code.
 func Error(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	WriteJSON(w, status, map[string]string{"error": message})
 }

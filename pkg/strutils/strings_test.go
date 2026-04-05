@@ -1,9 +1,9 @@
-package strutil_test
+package strutils_test
 
 import (
 	"testing"
 
-	"github.com/Sergio-dot/urtube/pkg/strutil"
+	"github.com/Sergio-dot/urtube/pkg/strutils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +20,7 @@ func TestIsEmpty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, strutil.IsEmpty(tt.input))
+			assert.Equal(t, tt.expected, strutils.IsEmpty(tt.input))
 		})
 	}
 }
