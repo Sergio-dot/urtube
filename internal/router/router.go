@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Sergio-dot/urtube/internal/handlers"
-	"github.com/Sergio-dot/urtube/internal/httputils"
 	"github.com/Sergio-dot/urtube/internal/search"
+	"github.com/Sergio-dot/urtube/pkg/httputils"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
