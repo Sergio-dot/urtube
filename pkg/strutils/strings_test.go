@@ -24,3 +24,20 @@ func TestIsEmpty(t *testing.T) {
 		})
 	}
 }
+
+func TestStringPtr(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected *string
+	}{
+		{name: "empty string", input: "", expected: nil},
+		{name: "non-empty string", input: "hello", expected: strutils.StringPtr("hello")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, strutils.StringPtr(tt.input))
+		})
+	}
+}

@@ -11,5 +11,8 @@ func IsEmpty(str string) bool {
 
 // StringPtr returns a pointer to the passed string
 func StringPtr(str string) *string {
+	if str == "" {
+		return nil
+	}
 	return &str
 }
