@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// NewRouter creates and returns a new HTTP handler with the defined routes.
 func NewRouter() http.Handler {
 	r := chi.NewRouter()
 
@@ -28,6 +29,7 @@ func NewRouter() http.Handler {
 	return r
 }
 
+// routerV1 creates and returns a new HTTP handler for the v1 API.
 func routerV1() http.Handler {
 	v1 := chi.NewRouter()
 
