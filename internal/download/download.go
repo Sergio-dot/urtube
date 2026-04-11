@@ -14,7 +14,9 @@ type Downloader interface {
 }
 
 // YtdlpDownloader is a downloader that uses ytdlp
-type YtdlpDownloader struct{}
+type YtdlpDownloader struct {
+	OutputDir string
+}
 
 // DownloadRequest is the request for downloading a video
 type DownloadRequest struct {
@@ -34,17 +36,18 @@ func (r *DownloadRequest) Validate() error {
 
 // Download downloads a video using ytdlp
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
-	command, err := ytdlp.New().
+	outputDir := d.OutputDir
+	if outputDir == "" {
+		outputDir = "./downloads"
+	}
+
+	_, err := ytdlp.New().
 		RemoteComponents("ejs:github").
 		PresetAlias(body.PresetAlias).
-		Output("./downloads/%(title)s.%(ext)s").
+		Output(outputDir+"/%(title)s.%(ext)s").
 		Run(ctx, body.URL)
 	if err != nil {
 		return err
-	}
-
-	if command == nil {
-		return errors.New("failed to create command")
 	}
 
 	return nil
