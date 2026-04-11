@@ -31,7 +31,10 @@ func TestDownloadVideo(t *testing.T) {
 		}
 		h := &DownloadHandler{Downloader: mock}
 
-		body := download.DownloadRequest{URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
+		body := download.DownloadRequest{
+			URL:         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			PresetAlias: "bestaudio",
+		}
 		jsonBody, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
@@ -57,15 +60,42 @@ func TestDownloadVideo(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	})
 
-	t.Run("downloader returns error", func(t *testing.T) {
+	t.Run("missing preset_alias triggers validation error", func(t *testing.T) {
 		mock := &mockDownloader{
 			MockDownload: func(ctx context.Context, body *download.DownloadRequest) error {
-				return errors.New("something went wrong")
+				return nil
 			},
 		}
 		h := &DownloadHandler{Downloader: mock}
 
-		body := download.DownloadRequest{URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
+		body := download.DownloadRequest{
+			URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		}
+		jsonBody, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadVideo(w, req)
+
+		assert.Error(t, err)
+		apiErr, ok := err.(httputils.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+		assert.Equal(t, "preset_alias is required", apiErr.Message)
+	})
+
+	t.Run("downloader returns error", func(t *testing.T) {
+		mock := &mockDownloader{
+			MockDownload: func(ctx context.Context, body *download.DownloadRequest) error {
+				return errors.New("mock failed")
+			},
+		}
+		h := &DownloadHandler{Downloader: mock}
+
+		body := download.DownloadRequest{
+			URL:         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			PresetAlias: "bestaudio",
+		}
 		jsonBody, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
@@ -76,7 +106,7 @@ func TestDownloadVideo(t *testing.T) {
 		apiErr, ok := err.(httputils.APIError)
 		assert.True(t, ok)
 		assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
-		assert.Equal(t, "failed to download video: something went wrong", apiErr.Message)
+		assert.Equal(t, "failed to download video: mock failed", apiErr.Message)
 	})
 
 	t.Run("nil downloader dependency", func(t *testing.T) {
