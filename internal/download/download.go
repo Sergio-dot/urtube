@@ -37,9 +37,6 @@ func (r *DownloadRequest) Validate() error {
 // Download downloads a video using ytdlp
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
 	outputDir := d.OutputDir
-	if outputDir == "" {
-		outputDir = "./downloads"
-	}
 
 	_, err := ytdlp.New().
 		RemoteComponents("ejs:github").
