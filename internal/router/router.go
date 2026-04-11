@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/handlers"
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/pkg/httputils"
@@ -12,7 +13,8 @@ import (
 )
 
 type Dependencies struct {
-	Searcher search.Searcher
+	Searcher   search.Searcher
+	Downloader download.Downloader
 }
 
 // NewRouter creates and returns a new HTTP handler with the defined routes.
@@ -38,6 +40,7 @@ func routerV1(deps Dependencies) http.Handler {
 	v1 := chi.NewRouter()
 
 	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchVideo))
+	v1.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Downloader: deps.Downloader}).DownloadVideo))
 
 	return v1
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/router"
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/internal/server"
@@ -20,8 +21,11 @@ func main() {
 	serverHost := os.Getenv("SERVER_HOST")
 	serverPort := os.Getenv("SERVER_PORT")
 
+	// ytdlp.MustInstallAll(context.Background())
+
 	router := router.NewRouter(router.Dependencies{
-		Searcher: &search.YtdlpSearcher{},
+		Searcher:   &search.YtdlpSearcher{},
+		Downloader: &download.YtdlpDownloader{},
 	})
 	srv, err := server.NewServer(fmt.Sprintf("%s:%s", serverHost, serverPort), router)
 	if err != nil {
