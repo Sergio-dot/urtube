@@ -19,8 +19,8 @@ func (h *DownloadHandler) DownloadVideo(w http.ResponseWriter, r *http.Request) 
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "downloader not available"}
 	}
 
-	body := &download.DownloadRequest{}
-	if err := json.NewDecoder(r.Body).Decode(body); err != nil {
+	var body download.DownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "invalid request body"}
 	}
 
@@ -28,7 +28,7 @@ func (h *DownloadHandler) DownloadVideo(w http.ResponseWriter, r *http.Request) 
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: err.Error()}
 	}
 
-	if err := h.Downloader.Download(r.Context(), body); err != nil {
+	if err := h.Downloader.Download(r.Context(), &body); err != nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "failed to download video: " + err.Error()}
 	}
 
