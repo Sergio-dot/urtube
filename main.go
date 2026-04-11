@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 
@@ -15,17 +17,33 @@ import (
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			log.Println("No .env file found; using environment variables.")
+		} else {
+			log.Fatalf("Error loading .env file: %v\n", err)
+		}
 	}
 
 	serverHost := os.Getenv("SERVER_HOST")
+	if serverHost == "" {
+		serverHost = "0.0.0.0"
+	}
+
 	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8080"
+	}
+
+	downloadDir := os.Getenv("DOWNLOAD_DIR")
+	if downloadDir == "" {
+		downloadDir = "./downloads"
+	}
 
 	// ytdlp.MustInstallAll(context.Background())
 
 	router := router.NewRouter(router.Dependencies{
 		Searcher:   &search.YtdlpSearcher{},
-		Downloader: &download.YtdlpDownloader{},
+		Downloader: &download.YtdlpDownloader{OutputDir: downloadDir},
 	})
 	srv, err := server.NewServer(fmt.Sprintf("%s:%s", serverHost, serverPort), router)
 	if err != nil {
