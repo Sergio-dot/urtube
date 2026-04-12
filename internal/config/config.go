@@ -44,17 +44,6 @@ func init() {
 	})
 
 	viper.WatchConfig()
-
-	if viper.GetString("LOG_LEVEL") == "debug" {
-		// print all config
-		fmt.Println("Server Host:", viper.GetString("SERVER_HOST"))
-		fmt.Println("Server Port:", viper.GetString("SERVER_PORT"))
-		fmt.Println("Download Dir:", viper.GetString("DOWNLOAD_DIR"))
-		fmt.Println("Log Level:", viper.GetString("LOG_LEVEL"))
-		fmt.Println("JSON:", viper.GetBool("JSON"))
-		fmt.Println("Concise:", viper.GetBool("CONCISE"))
-		fmt.Println("Request Headers:", viper.GetBool("REQUEST_HEADERS"))
-	}
 }
 
 // NewConfig creates and returns a new Config.
