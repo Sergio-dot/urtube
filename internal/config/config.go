@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -33,7 +34,7 @@ func init() {
 	viper.AutomaticEnv()
 	err := viper.ReadInConfig()
 	if err != nil {
-		if errors.As(err, &viper.ConfigFileNotFoundError{}) {
+		if errors.As(err, &viper.ConfigFileNotFoundError{}) || errors.Is(err, os.ErrNotExist) {
 			log.Println("No .env file found; using environment variables.")
 		} else {
 			log.Fatalf("Error reading .env file: %v\n", err)

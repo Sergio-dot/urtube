@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/lrstanley/go-ytdlp"
@@ -37,6 +38,15 @@ func TestNewRouter_Routes(t *testing.T) {
 	r := NewRouter(Dependencies{
 		Searcher:   ms,
 		Downloader: md,
+		Config: config.Config{
+			ServerHost:     "localhost",
+			ServerPort:     "8080",
+			DownloadDir:    "./downloads",
+			LogLevel:       "info",
+			JSON:           false,
+			Concise:        true,
+			RequestHeaders: true,
+		},
 	})
 
 	t.Run("GET /api/v1/search/{searchParam}", func(t *testing.T) {
