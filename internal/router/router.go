@@ -1,31 +1,55 @@
 package router
 
 import (
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/handlers"
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/pkg/httputils"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httplog/v2"
 )
 
 type Dependencies struct {
 	Searcher   search.Searcher
 	Downloader download.Downloader
+	Config     config.Config
 }
 
 // NewRouter creates and returns a new HTTP handler with the defined routes.
 func NewRouter(deps Dependencies) http.Handler {
 	r := chi.NewRouter()
 
+	logLevel := slog.LevelInfo
+	switch strings.ToLower(deps.Config.LogLevel) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	}
+
+	logger := httplog.NewLogger("urtube", httplog.Options{
+		JSON:           deps.Config.JSON,
+		LogLevel:       logLevel,
+		Concise:        deps.Config.Concise,
+		RequestHeaders: deps.Config.RequestHeaders,
+	})
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.StripSlashes)
 	r.Use(middleware.CleanPath)
-	r.Use(middleware.Logger)
+	r.Use(httplog.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(time.Second * 30))
 	r.Use(middleware.Heartbeat("/healthz"))
