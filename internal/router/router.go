@@ -63,8 +63,8 @@ func NewRouter(deps Dependencies) http.Handler {
 func routerV1(deps Dependencies) http.Handler {
 	v1 := chi.NewRouter()
 
-	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchVideo))
-	v1.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Downloader: deps.Downloader}).DownloadVideo))
+	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchMedia))
+	v1.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Downloader: deps.Downloader}).DownloadMedia))
 
 	return v1
 }
