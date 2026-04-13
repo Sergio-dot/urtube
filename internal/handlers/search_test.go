@@ -22,7 +22,7 @@ func (m *mockSearcher) Search(ctx context.Context, param string) ([]*ytdlp.Extra
 	return m.MockSearch(ctx, param)
 }
 
-func TestSearchVideoSuccess(t *testing.T) {
+func TestSearchMediaSuccess(t *testing.T) {
 	mock := &mockSearcher{
 		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
 			return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil
@@ -38,13 +38,13 @@ func TestSearchVideoSuccess(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
-	httputils.MakeHandler(handler.SearchVideo).ServeHTTP(w, req)
+	httputils.MakeHandler(handler.SearchMedia).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "Test Video")
 }
 
-func TestSearchVideoEmpty(t *testing.T) {
+func TestSearchMediaEmpty(t *testing.T) {
 	mock := &mockSearcher{
 		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
 			return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil
@@ -60,13 +60,13 @@ func TestSearchVideoEmpty(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
-	httputils.MakeHandler(handler.SearchVideo).ServeHTTP(w, req)
+	httputils.MakeHandler(handler.SearchMedia).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "search parameter is required")
 }
 
-func TestSearchVideoNoResults(t *testing.T) {
+func TestSearchMediaNoResults(t *testing.T) {
 	mock := &mockSearcher{
 		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
 			return nil, search.ErrNoResults
@@ -82,7 +82,7 @@ func TestSearchVideoNoResults(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
-	httputils.MakeHandler(handler.SearchVideo).ServeHTTP(w, req)
+	httputils.MakeHandler(handler.SearchMedia).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.Contains(t, w.Body.String(), "no results found")

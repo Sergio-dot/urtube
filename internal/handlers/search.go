@@ -15,8 +15,8 @@ type SearchHandler struct {
 	Searcher search.Searcher
 }
 
-// SearchVideo handles the search video request
-func (h *SearchHandler) SearchVideo(w http.ResponseWriter, r *http.Request) error {
+// SearchMedia handles the search media request
+func (h *SearchHandler) SearchMedia(w http.ResponseWriter, r *http.Request) error {
 	param := chi.URLParam(r, "searchParam")
 	if strutils.IsEmpty(param) {
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
