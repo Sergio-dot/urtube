@@ -2,11 +2,9 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
@@ -40,11 +38,6 @@ func init() {
 			log.Fatalf("Error reading .env file: %v\n", err)
 		}
 	}
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		fmt.Println("Config file changed:", e.Name)
-	})
-
-	viper.WatchConfig()
 }
 
 // NewConfig creates and returns a new Config.
