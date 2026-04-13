@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"errors"
+	"path/filepath"
 
 	"github.com/Sergio-dot/urtube/pkg/strutils"
 	"github.com/lrstanley/go-ytdlp"
@@ -20,29 +21,45 @@ type YtdlpDownloader struct {
 
 // DownloadRequest is the request for downloading a video
 type DownloadRequest struct {
-	URL         string `json:"url"`
-	PresetAlias string `json:"preset_alias"`
+	URL   string            `json:"url"`
+	Env   map[string]string `json:"env,omitempty"`
+	Flags *ytdlp.FlagConfig `json:"flags,omitempty"`
 }
 
 func (r *DownloadRequest) Validate() error {
 	if strutils.IsEmpty(r.URL) {
 		return errors.New("url is required")
 	}
-	if strutils.IsEmpty(r.PresetAlias) {
-		return errors.New("preset_alias is required")
+	if r.Flags != nil {
+		if err := r.Flags.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // Download downloads a video using ytdlp
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
-	downloadDir := d.DownloadDir
+	cmd := ytdlp.New().
+		RemoteComponents("ejs:github")
 
-	_, err := ytdlp.New().
-		RemoteComponents("ejs:github").
-		PresetAlias(body.PresetAlias).
-		Output(downloadDir+"/%(title)s.%(ext)s").
-		Run(ctx, body.URL)
+	if body.Flags != nil {
+		cmd.SetFlagConfig(body.Flags)
+	}
+
+	if body.Flags != nil && body.Flags.Filesystem.Output != nil {
+		cmd.Output(filepath.Join(d.DownloadDir, *body.Flags.Filesystem.Output))
+	} else {
+		cmd.Output(filepath.Join(d.DownloadDir, "%(title)s.%(ext)s"))
+	}
+
+	if body.Env != nil {
+		for k, v := range body.Env {
+			cmd.SetEnvVar(k, v)
+		}
+	}
+
+	_, err := cmd.Run(ctx, body.URL)
 	if err != nil {
 		return err
 	}

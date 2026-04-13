@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lrstanley/go-ytdlp"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,25 +13,23 @@ func TestValidate(t *testing.T) {
 	tests := []struct {
 		name          string
 		url           string
-		presetAlias   string
+		flags         *ytdlp.FlagConfig
 		expectedError error
 	}{
 		{
 			name:          "URL is required",
 			url:           "",
-			presetAlias:   "bestaudio",
 			expectedError: errors.New("url is required"),
 		},
 		{
-			name:          "Preset alias is required",
+			name:          "Valid request with no flags",
 			url:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			presetAlias:   "",
-			expectedError: errors.New("preset_alias is required"),
+			expectedError: nil,
 		},
 		{
-			name:          "Valid request",
-			url:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			presetAlias:   "bestaudio",
+			name: "Valid request with flags",
+			url:  "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			flags: &ytdlp.FlagConfig{},
 			expectedError: nil,
 		},
 	}
@@ -38,8 +37,8 @@ func TestValidate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := &DownloadRequest{
-				URL:         tt.url,
-				PresetAlias: tt.presetAlias,
+				URL:   tt.url,
+				Flags: tt.flags,
 			}
 			err := req.Validate()
 			if tt.expectedError != nil {
@@ -60,13 +59,11 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 	tests := []struct {
 		name          string
 		url           string
-		presetAlias   string
 		expectedError error
 	}{
 		{
 			name:          "Download with success",
 			url:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			presetAlias:   "bestaudio",
 			expectedError: nil,
 		},
 	}
@@ -75,8 +72,7 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			downloader := &YtdlpDownloader{}
 			err := downloader.Download(context.Background(), &DownloadRequest{
-				URL:         tt.url,
-				PresetAlias: tt.presetAlias,
+				URL: tt.url,
 			})
 			if err != nil {
 				assert.Error(t, err)
