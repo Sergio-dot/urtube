@@ -22,45 +22,8 @@ func (m *mockDownloader) Download(ctx context.Context, body *download.DownloadRe
 	return m.MockDownload(ctx, body)
 }
 
-func TestDownloadVideo(t *testing.T) {
+func TestDownloadMedia(t *testing.T) {
 	t.Run("successful download request", func(t *testing.T) {
-		mock := &mockDownloader{
-			MockDownload: func(ctx context.Context, body *download.DownloadRequest) error {
-				return nil
-			},
-		}
-		h := &DownloadHandler{Downloader: mock}
-
-		body := download.DownloadRequest{
-			URL:         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			PresetAlias: "bestaudio",
-		}
-		jsonBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
-		w := httptest.NewRecorder()
-
-		err := h.DownloadVideo(w, req)
-
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.JSONEq(t, `{"message":"download successful"}`, w.Body.String())
-	})
-
-	t.Run("invalid request body", func(t *testing.T) {
-		h := &DownloadHandler{Downloader: &mockDownloader{}}
-
-		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString("invalid json"))
-		w := httptest.NewRecorder()
-
-		err := h.DownloadVideo(w, req)
-
-		assert.Error(t, err)
-		apiErr, ok := err.(httputils.APIError)
-		assert.True(t, ok)
-		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-	})
-
-	t.Run("missing preset_alias triggers validation error", func(t *testing.T) {
 		mock := &mockDownloader{
 			MockDownload: func(ctx context.Context, body *download.DownloadRequest) error {
 				return nil
@@ -75,13 +38,47 @@ func TestDownloadVideo(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
-		err := h.DownloadVideo(w, req)
+		err := h.DownloadMedia(w, req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"message":"download successful"}`, w.Body.String())
+	})
+
+	t.Run("invalid request body", func(t *testing.T) {
+		h := &DownloadHandler{Downloader: &mockDownloader{}}
+
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString("invalid json"))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadMedia(w, req)
 
 		assert.Error(t, err)
 		apiErr, ok := err.(httputils.APIError)
 		assert.True(t, ok)
 		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-		assert.Equal(t, "preset_alias is required", apiErr.Message)
+	})
+
+	t.Run("missing url triggers validation error", func(t *testing.T) {
+		mock := &mockDownloader{
+			MockDownload: func(ctx context.Context, body *download.DownloadRequest) error {
+				return nil
+			},
+		}
+		h := &DownloadHandler{Downloader: mock}
+
+		body := download.DownloadRequest{}
+		jsonBody, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadMedia(w, req)
+
+		assert.Error(t, err)
+		apiErr, ok := err.(httputils.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+		assert.Equal(t, "url is required", apiErr.Message)
 	})
 
 	t.Run("downloader returns error", func(t *testing.T) {
@@ -93,14 +90,13 @@ func TestDownloadVideo(t *testing.T) {
 		h := &DownloadHandler{Downloader: mock}
 
 		body := download.DownloadRequest{
-			URL:         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			PresetAlias: "bestaudio",
+			URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 		}
 		jsonBody, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
-		err := h.DownloadVideo(w, req)
+		err := h.DownloadMedia(w, req)
 
 		assert.Error(t, err)
 		apiErr, ok := err.(httputils.APIError)
@@ -117,7 +113,7 @@ func TestDownloadVideo(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
-		err := h.DownloadVideo(w, req)
+		err := h.DownloadMedia(w, req)
 
 		assert.Error(t, err)
 		apiErr, ok := err.(httputils.APIError)

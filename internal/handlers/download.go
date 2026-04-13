@@ -13,8 +13,8 @@ type DownloadHandler struct {
 	Downloader download.Downloader
 }
 
-// DownloadVideo handles the download video request
-func (h *DownloadHandler) DownloadVideo(w http.ResponseWriter, r *http.Request) error {
+// DownloadMedia handles the download media request
+func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) error {
 	if h.Downloader == nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "downloader not available"}
 	}
