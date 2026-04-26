@@ -2,7 +2,7 @@ package config
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/viper"
@@ -19,7 +19,8 @@ type Config struct {
 	RequestHeaders bool
 }
 
-func init() {
+// Load reads the configuration from environment variables.
+func Load() (*Config, error) {
 	viper.SetDefault("SERVER_HOST", "localhost")
 	viper.SetDefault("SERVER_PORT", "8080")
 	viper.SetDefault("DOWNLOAD_DIR", "./downloads")
@@ -33,11 +34,13 @@ func init() {
 	err := viper.ReadInConfig()
 	if err != nil {
 		if errors.As(err, &viper.ConfigFileNotFoundError{}) || errors.Is(err, os.ErrNotExist) {
-			log.Println("No .env file found; using environment variables.")
+			slog.Info("no .env file found, using environment variables")
 		} else {
-			log.Fatalf("Error reading .env file: %v\n", err)
+			return nil, err
 		}
 	}
+
+	return NewConfig(), nil
 }
 
 // NewConfig creates and returns a new Config.

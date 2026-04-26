@@ -3,7 +3,7 @@ package httputils
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -20,7 +20,7 @@ func (e APIError) Error() string {
 // APIFunc is a custom signature for handlers that allows returning an error.
 type APIFunc func(w http.ResponseWriter, r *http.Request) error
 
-// MakeHandler adapts an APIFunc into a standard http.HandlerFunc
+// MakeHandler adapts an APIFunc into a standard http.HandlerFunc.
 func MakeHandler(h APIFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
@@ -28,8 +28,7 @@ func MakeHandler(h APIFunc) http.HandlerFunc {
 			if errors.As(err, &apiErr) {
 				Error(w, apiErr.StatusCode, apiErr.Message)
 			} else {
-				// unexpected internal error
-				log.Printf("internal server error: %v", err)
+				slog.Error("internal server error", "error", err)
 				Error(w, http.StatusInternalServerError, "internal server error")
 			}
 		}
@@ -45,7 +44,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	buf, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("failed to marshal json: %v", err)
+		slog.Error("failed to marshal json", "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -54,8 +53,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 	w.WriteHeader(status)
 	_, err = w.Write(buf)
 	if err != nil {
-		log.Printf("failed to write json: %v", err)
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		slog.Error("failed to write json", "error", err)
 		return
 	}
 }

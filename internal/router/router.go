@@ -3,7 +3,6 @@ package router
 import (
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/Sergio-dot/urtube/internal/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/go-chi/httplog/v2"
 )
 
+// Dependencies holds the application dependencies.
 type Dependencies struct {
 	Searcher   search.Searcher
 	Downloader download.Downloader
@@ -26,19 +26,12 @@ type Dependencies struct {
 func NewRouter(deps Dependencies) http.Handler {
 	r := chi.NewRouter()
 
-	logLevel := slog.LevelInfo
-	switch strings.ToLower(deps.Config.LogLevel) {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "info":
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(deps.Config.LogLevel)); err != nil {
 		logLevel = slog.LevelInfo
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
 	}
 
-	logger := httplog.NewLogger("urtube", httplog.Options{
+	httpLogger := httplog.NewLogger("urtube", httplog.Options{
 		JSON:           deps.Config.JSON,
 		LogLevel:       logLevel,
 		Concise:        deps.Config.Concise,
@@ -49,7 +42,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.StripSlashes)
 	r.Use(middleware.CleanPath)
-	r.Use(httplog.RequestLogger(logger))
+	r.Use(httplog.RequestLogger(httpLogger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(time.Second * 30))
 	r.Use(middleware.Heartbeat("/healthz"))
