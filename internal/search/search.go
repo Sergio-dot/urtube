@@ -8,12 +8,12 @@ import (
 	"github.com/lrstanley/go-ytdlp"
 )
 
-// Searcher is an interface for searching videos
+// Searcher is an interface for searching videos.
 type Searcher interface {
 	Search(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error)
 }
 
-// YtdlpSearcher is a searcher that uses ytdlp
+// YtdlpSearcher is a searcher that uses ytdlp.
 type YtdlpSearcher struct{}
 
 var (
@@ -22,11 +22,11 @@ var (
 	ErrNoResults     = errors.New("no results found")
 )
 
-// Search searches for videos using ytdlp
+// Search searches for videos using ytdlp.
 func (s *YtdlpSearcher) Search(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
 	searchStr := fmt.Sprintf("ytsearch5:%s", param)
 
-	command, err := ytdlp.New().
+	result, err := ytdlp.New().
 		PrintJSON().
 		SkipDownload().
 		FlatPlaylist().
@@ -35,7 +35,7 @@ func (s *YtdlpSearcher) Search(ctx context.Context, param string) ([]*ytdlp.Extr
 		return nil, fmt.Errorf("%w: %w", ErrSearchFailed, err)
 	}
 
-	searchResults, err := command.GetExtractedInfo()
+	searchResults, err := result.GetExtractedInfo()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrExtractFailed, err)
 	}
