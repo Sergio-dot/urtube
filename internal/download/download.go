@@ -9,23 +9,24 @@ import (
 	"github.com/lrstanley/go-ytdlp"
 )
 
-// Downloader is an interface for downloading videos
+// Downloader is an interface for downloading videos.
 type Downloader interface {
 	Download(ctx context.Context, body *DownloadRequest) error
 }
 
-// YtdlpDownloader is a downloader that uses ytdlp
+// YtdlpDownloader is a downloader that uses ytdlp.
 type YtdlpDownloader struct {
 	DownloadDir string
 }
 
-// DownloadRequest is the request for downloading a video
+// DownloadRequest is the request for downloading a video.
 type DownloadRequest struct {
 	URL   string            `json:"url"`
 	Env   map[string]string `json:"env,omitempty"`
 	Flags *ytdlp.FlagConfig `json:"flags,omitempty"`
 }
 
+// Validate checks if the DownloadRequest is valid.
 func (r *DownloadRequest) Validate() error {
 	if strutils.IsEmpty(r.URL) {
 		return errors.New("url is required")
@@ -38,10 +39,9 @@ func (r *DownloadRequest) Validate() error {
 	return nil
 }
 
-// Download downloads a video using ytdlp
+// Download downloads a video using ytdlp.
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
-	cmd := ytdlp.New().
-		RemoteComponents("ejs:github")
+	cmd := ytdlp.New()
 
 	if body.Flags != nil {
 		cmd.SetFlagConfig(body.Flags)
@@ -60,9 +60,6 @@ func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) e
 	}
 
 	_, err := cmd.Run(ctx, body.URL)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return err
 }

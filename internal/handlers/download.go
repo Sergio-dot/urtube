@@ -8,12 +8,12 @@ import (
 	"github.com/Sergio-dot/urtube/pkg/httputils"
 )
 
-// DownloadHandler is the handler for the download video request
+// DownloadHandler is the handler for the download video request.
 type DownloadHandler struct {
 	Downloader download.Downloader
 }
 
-// DownloadMedia handles the download media request
+// DownloadMedia handles the download media request.
 func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) error {
 	if h.Downloader == nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "downloader not available"}

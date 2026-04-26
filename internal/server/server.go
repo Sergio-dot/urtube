@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 )
@@ -49,7 +49,7 @@ func (s *Server) Addr() string {
 
 // Start begins serving HTTP requests on the listener. It blocks until the server is stopped.
 func (s *Server) Start() error {
-	log.Print("Server started on port: ", s.server.Addr)
+	slog.Info("server started", "address", s.Addr())
 	err := s.server.Serve(s.listener)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

@@ -27,9 +27,9 @@ func TestValidate(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "Valid request with flags",
-			url:  "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-			flags: &ytdlp.FlagConfig{},
+			name:          "Valid request with flags",
+			url:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			flags:         &ytdlp.FlagConfig{},
 			expectedError: nil,
 		},
 	}
@@ -70,11 +70,19 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			downloader := &YtdlpDownloader{}
-			err := downloader.Download(context.Background(), &DownloadRequest{
+			// t.TempDir() creates a temporary directory that Go automatically
+			// cleans up when the test finishes. This isolates the download
+			// and ensures no files are left behind.
+			downloader := &YtdlpDownloader{
+				DownloadDir: t.TempDir(),
+			}
+
+			req := &DownloadRequest{
 				URL: tt.url,
-			})
-			if err != nil {
+			}
+
+			err := downloader.Download(context.Background(), req)
+			if tt.expectedError != nil {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)

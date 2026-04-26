@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/download"
@@ -12,22 +13,40 @@ import (
 )
 
 func main() {
-	config := config.NewConfig()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("server creation failed", "error", err)
+		os.Exit(1)
+	}
 
-	// ytdlp.MustInstallAll(context.Background())
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		slog.Error("invalid log level", "error", err)
+		os.Exit(1)
+	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: false,
+		Level:     level,
+	}))
+
+	slog.SetDefault(logger)
 
 	router := router.NewRouter(router.Dependencies{
 		Searcher:   &search.YtdlpSearcher{},
-		Downloader: &download.YtdlpDownloader{DownloadDir: config.DownloadDir},
-		Config:     *config,
+		Downloader: &download.YtdlpDownloader{DownloadDir: cfg.DownloadDir},
+		Config:     *cfg,
 	})
-	srv, err := server.NewServer(fmt.Sprintf("%s:%s", config.ServerHost, config.ServerPort), router)
+
+	srv, err := server.NewServer(fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort), router)
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		slog.Error("server creation failed", "error", err)
+		os.Exit(1)
 	}
 
 	err = srv.Start()
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		slog.Error("server failed to start", "error", err)
+		os.Exit(1)
 	}
 }

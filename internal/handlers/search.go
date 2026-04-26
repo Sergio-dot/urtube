@@ -10,13 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// SearchHandler is the handler for the search video request
+// SearchHandler is the handler for the search video request.
 type SearchHandler struct {
 	Searcher search.Searcher
 }
 
-// SearchMedia handles the search media request
+// SearchMedia handles the search media request.
 func (h *SearchHandler) SearchMedia(w http.ResponseWriter, r *http.Request) error {
+	if h.Searcher == nil {
+		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "searcher not available"}
+	}
+
 	param := chi.URLParam(r, "searchParam")
 	if strutils.IsEmpty(param) {
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
