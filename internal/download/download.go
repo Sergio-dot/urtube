@@ -41,7 +41,9 @@ func (r *DownloadRequest) Validate() error {
 
 // Download downloads a video using ytdlp.
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
-	cmd := ytdlp.New()
+	cmd := ytdlp.New().
+		SetExecutable("yt-dlp").
+		NoUpdate()
 
 	if body.Flags != nil {
 		cmd.SetFlagConfig(body.Flags)

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark,.dark *));
+
+@theme {
+  /* Define custom brand colors */
+  --color-brand: #aa3bff;
+  --color-brand-dark: #8b2fd6;
+
+  /* Custom fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    @apply border-gray-200 dark:border-gray-800 transition-colors duration-500;
+  }
+
+  html {
+    /* Smooth scrolling for anchor links */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    --transition-speed: 0s;
+
+    /* Base text and background using Tailwind classes */
+    @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-50;
+
+    transition:
+      background-color var(--transition-speed),
+      color var(--transition-speed),
+      border-color var(--transition-speed);
+
+    /* Optimize font rendering */
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* Ensure body fills screen */
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  /* Reset default margins for common elements */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p {
+    margin: 0;
+  }
+}

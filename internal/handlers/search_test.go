@@ -15,16 +15,16 @@ import (
 )
 
 type mockSearcher struct {
-	MockSearch func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error)
+	MockSearch func(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error)
 }
 
-func (m *mockSearcher) Search(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
-	return m.MockSearch(ctx, param)
+func (m *mockSearcher) Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
+	return m.MockSearch(ctx, param, limit)
 }
 
 func TestSearchMediaSuccess(t *testing.T) {
 	mock := &mockSearcher{
-		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
+		MockSearch: func(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
 			return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil
 		},
 	}
@@ -46,7 +46,7 @@ func TestSearchMediaSuccess(t *testing.T) {
 
 func TestSearchMediaEmpty(t *testing.T) {
 	mock := &mockSearcher{
-		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
+		MockSearch: func(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
 			return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil
 		},
 	}
@@ -68,7 +68,7 @@ func TestSearchMediaEmpty(t *testing.T) {
 
 func TestSearchMediaNoResults(t *testing.T) {
 	mock := &mockSearcher{
-		MockSearch: func(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
+		MockSearch: func(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
 			return nil, search.ErrNoResults
 		},
 	}
