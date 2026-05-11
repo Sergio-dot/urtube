@@ -5,12 +5,17 @@ import (
 	"log/slog"
 	"os"
 
+	"embed"
+
 	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/router"
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/internal/server"
 )
+
+//go:embed all:web/dist
+var uiFS embed.FS
 
 func main() {
 	cfg, err := config.Load()
@@ -36,6 +41,7 @@ func main() {
 		Searcher:   &search.YtdlpSearcher{},
 		Downloader: &download.YtdlpDownloader{DownloadDir: cfg.DownloadDir},
 		Config:     *cfg,
+		UI:         uiFS,
 	})
 
 	srv, err := server.NewServer(fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort), router)
