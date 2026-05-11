@@ -10,7 +10,7 @@ import (
 
 // Searcher is an interface for searching videos.
 type Searcher interface {
-	Search(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error)
+	Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error)
 }
 
 // YtdlpSearcher is a searcher that uses ytdlp.
@@ -23,13 +23,21 @@ var (
 )
 
 // Search searches for videos using ytdlp.
-func (s *YtdlpSearcher) Search(ctx context.Context, param string) ([]*ytdlp.ExtractedInfo, error) {
-	searchStr := fmt.Sprintf("ytsearch5:%s", param)
+func (s *YtdlpSearcher) Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	searchStr := fmt.Sprintf("ytsearch%d:%s", limit, param)
 
 	result, err := ytdlp.New().
+		SetExecutable("yt-dlp").
+		NoUpdate().
 		PrintJSON().
+		IgnoreErrors().
+		NoWarnings().
 		SkipDownload().
 		FlatPlaylist().
+		MatchFilters("live_status != 'is_live'").
 		Run(ctx, searchStr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSearchFailed, err)

@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/Sergio-dot/urtube/internal/search"
 	"github.com/Sergio-dot/urtube/pkg/httputils"
@@ -26,7 +27,14 @@ func (h *SearchHandler) SearchMedia(w http.ResponseWriter, r *http.Request) erro
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
 	}
 
-	videos, err := h.Searcher.Search(r.Context(), param)
+	limit := 5
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil {
+			limit = val
+		}
+	}
+
+	videos, err := h.Searcher.Search(r.Context(), param, limit)
 	if err != nil {
 		if errors.Is(err, search.ErrNoResults) {
 			return httputils.APIError{StatusCode: http.StatusNotFound, Message: err.Error()}
