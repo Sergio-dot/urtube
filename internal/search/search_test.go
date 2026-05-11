@@ -30,7 +30,7 @@ func TestYtdlpSearcher_Integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			searcher := &YtdlpSearcher{}
-			results, err := searcher.Search(context.Background(), tt.query)
+			results, err := searcher.Search(context.Background(), tt.query, tt.expectedResults)
 			if err != nil {
 				assert.Error(t, err)
 				assert.Equal(t, tt.expectedError, err)
