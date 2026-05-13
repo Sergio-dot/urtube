@@ -18,19 +18,21 @@ func TestYtdlpSearcher_Integration(t *testing.T) {
 		query           string
 		expectedError   error
 		expectedResults int
+		wantLiveStreams bool
 	}{
 		{
-			name:            "Search with success",
+			name:            "Search with success 5 results include live streams",
 			query:           "Rick Roll",
 			expectedError:   nil,
 			expectedResults: 5,
+			wantLiveStreams: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			searcher := &YtdlpSearcher{}
-			results, err := searcher.Search(context.Background(), tt.query, tt.expectedResults)
+			results, err := searcher.Search(context.Background(), tt.query, tt.expectedResults, tt.wantLiveStreams)
 			if err != nil {
 				assert.Error(t, err)
 				assert.Equal(t, tt.expectedError, err)

@@ -10,7 +10,7 @@ import (
 
 // Searcher is an interface for searching videos.
 type Searcher interface {
-	Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error)
+	Search(ctx context.Context, param string, limit int, wantLiveStream bool) ([]*ytdlp.ExtractedInfo, error)
 }
 
 // YtdlpSearcher is a searcher that uses ytdlp.
@@ -23,22 +23,33 @@ var (
 )
 
 // Search searches for videos using ytdlp.
-func (s *YtdlpSearcher) Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
+func (s *YtdlpSearcher) Search(ctx context.Context, param string, limit int, wantLiveStream bool) ([]*ytdlp.ExtractedInfo, error) {
 	if limit <= 0 {
 		limit = 5
 	}
-	searchStr := fmt.Sprintf("ytsearch%d:%s", limit, param)
 
-	result, err := ytdlp.New().
+	cmd := ytdlp.New().
 		SetExecutable("yt-dlp").
 		NoUpdate().
 		PrintJSON().
 		IgnoreErrors().
 		NoWarnings().
 		SkipDownload().
-		FlatPlaylist().
-		MatchFilters("live_status != 'is_live'").
-		Run(ctx, searchStr)
+		FlatPlaylist()
+
+	if !wantLiveStream {
+		cmd.MatchFilters("live_status != 'is_live'")
+	}
+
+	// When filtering out live streams, over-fetch to compensate for results
+	// that may be removed by the live_status filter.
+	fetchLimit := limit
+	if !wantLiveStream {
+		fetchLimit = limit * 4
+	}
+
+	searchStr := fmt.Sprintf("ytsearch%d:%s", fetchLimit, param)
+	result, err := cmd.Run(ctx, searchStr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSearchFailed, err)
 	}
@@ -51,14 +62,17 @@ func (s *YtdlpSearcher) Search(ctx context.Context, param string, limit int) ([]
 		return nil, ErrNoResults
 	}
 
-	videos := make([]*ytdlp.ExtractedInfo, 0, len(searchResults))
-	for _, result := range searchResults {
-		if result == nil || result.Title == nil || result.URL == nil {
+	videos := make([]*ytdlp.ExtractedInfo, 0, limit)
+	for _, r := range searchResults {
+		if r == nil || r.Title == nil || r.URL == nil {
 			continue
 		}
-
-		videos = append(videos, result)
+		videos = append(videos, r)
+		if len(videos) == limit {
+			break
+		}
 	}
+
 	if len(videos) == 0 {
 		return nil, ErrNoResults
 	}

@@ -18,7 +18,7 @@ type mockSearcher struct {
 	Called bool
 }
 
-func (m *mockSearcher) Search(ctx context.Context, param string, limit int) ([]*ytdlp.ExtractedInfo, error) {
+func (m *mockSearcher) Search(ctx context.Context, param string, limit int, wantLiveStreams bool) ([]*ytdlp.ExtractedInfo, error) {
 	m.Called = true
 	return nil, search.ErrNoResults
 }

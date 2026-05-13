@@ -34,7 +34,14 @@ func (h *SearchHandler) SearchMedia(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
-	videos, err := h.Searcher.Search(r.Context(), param, limit)
+	wantLiveStreams := false
+	if wls := r.URL.Query().Get("wantLiveStreams"); wls != "" {
+		if val, err := strconv.ParseBool(wls); err == nil {
+			wantLiveStreams = val
+		}
+	}
+
+	videos, err := h.Searcher.Search(r.Context(), param, limit, wantLiveStreams)
 	if err != nil {
 		if errors.Is(err, search.ErrNoResults) {
 			return httputils.APIError{StatusCode: http.StatusNotFound, Message: err.Error()}
