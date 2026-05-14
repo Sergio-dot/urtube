@@ -3,6 +3,7 @@ import Navbar from "./components/Navbar";
 import Form from "./components/Form";
 import SearchResults from "./components/SearchResults";
 import ErrorModal from "./components/ErrorModal";
+import Footer from "./components/Footer";
 import { useEffect, useState } from "react";
 import type { Video } from "./types";
 
@@ -12,6 +13,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [results, setResults] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -28,6 +30,8 @@ function App() {
             "yt-dlp is not installed on the server. Please install it to use urtube: https://github.com/yt-dlp/yt-dlp",
           );
           setShowError(true);
+        } else {
+          setYtdlpVersion(data.dependencies.version);
         }
       })
       .catch((err) => {
@@ -38,24 +42,26 @@ function App() {
   }, []);
 
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <div className="navbar">
         <Navbar />
       </div>
 
-      <div className="form">
-        <Form onResults={setResults} onLoading={setLoading} />
-      </div>
-
-      {loading && (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+      <main className="grow">
+        <div className="form">
+          <Form onResults={setResults} onLoading={setLoading} />
         </div>
-      )}
 
-      <div className="results">
-        <SearchResults results={results} />
-      </div>
+        {loading && (
+          <div className="flex justify-center py-10">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+          </div>
+        )}
+
+        <div className="results">
+          <SearchResults results={results} />
+        </div>
+      </main>
 
       <ErrorModal
         open={showError}
@@ -63,7 +69,9 @@ function App() {
         title={errorTitle}
         message={errorMessage}
       />
-    </>
+
+      <Footer version={ytdlpVersion} />
+    </div>
   );
 }
 
