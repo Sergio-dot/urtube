@@ -15,7 +15,7 @@ import logoLight from "../assets/logo-light.png";
 import { useTheme } from "../hooks/useTheme";
 
 const navigation = [
-  { name: "Downloader", href: "#", current: true },
+  { name: "Dashboard", href: "#", current: true },
   { name: "About", href: "#", current: false },
 ];
 

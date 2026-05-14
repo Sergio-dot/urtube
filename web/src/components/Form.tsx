@@ -54,7 +54,7 @@ export default function Form({ onResults, onLoading }: FormProps) {
       <div className="w-full max-w-2xl space-y-10">
         <div className="text-center">
           <h2 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl">
-            Downloader
+            Dashboard
           </h2>
           <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-400">
             Search for videos to start downloading your favorite content.
