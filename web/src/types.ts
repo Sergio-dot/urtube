@@ -16,5 +16,14 @@ export interface Video {
 export interface SelectOption {
   id: string | number;
   label: string;
-  value: any;
+  value: unknown;
+}
+
+export type DownloadStatus = "idle" | "loading" | "success" | "error";
+
+export interface DownloadState {
+  videoId: string;
+  status: DownloadStatus;
+  progress?: number;
+  errorMessage?: string;
 }
