@@ -6,7 +6,7 @@ import ErrorModal from "./components/ErrorModal";
 import Footer from "./components/Footer";
 import CollectionPanel from "./components/CollectionPanel";
 import { useEffect, useState } from "react";
-import type { Video } from "./types";
+import type { Video, DownloadState } from "./types";
 
 function App() {
   const [showError, setShowError] = useState(false);
@@ -18,6 +18,10 @@ function App() {
 
   const [collection, setCollection] = useState<Video[]>([]);
   const [showPanel, setShowPanel] = useState(false);
+
+  const [downloadStates, setDownloadStates] = useState<
+    Record<string, DownloadState>
+  >({});
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -59,6 +63,60 @@ function App() {
     setCollection([]);
   };
 
+  const downloadVideo = async (video: Video) => {
+    // Prevent multiple downloads of the same video if already loading or success
+    if (
+      downloadStates[video.id]?.status === "loading" ||
+      downloadStates[video.id]?.status === "success"
+    ) {
+      return;
+    }
+
+    setDownloadStates((prev) => ({
+      ...prev,
+      [video.id]: { videoId: video.id, status: "loading" },
+    }));
+
+    try {
+      const response = await fetch("/api/v1/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: video.url }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to start download");
+      }
+
+      setDownloadStates((prev) => ({
+        ...prev,
+        [video.id]: { videoId: video.id, status: "success" },
+      }));
+    } catch (error) {
+      console.error("Download error:", error);
+      setDownloadStates((prev) => ({
+        ...prev,
+        [video.id]: {
+          videoId: video.id,
+          status: "error",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+        },
+      }));
+    }
+  };
+
+  const cancelDownload = (videoId: string) => {
+    // TODO: BE endpoint implementation is missing, for now just reset the UI state.
+    // After implementation, send a DELETE/POST to endpoint e.g. /api/v1/download/cancel/:id
+    setDownloadStates((prev) => {
+      const newState = { ...prev };
+      delete newState[videoId];
+      return newState;
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <div className="navbar">
@@ -84,7 +142,10 @@ function App() {
             results={results}
             onAddVideo={addToCollection}
             onRemoveVideo={removeFromCollection}
+            onDownloadVideo={downloadVideo}
+            onCancelDownload={cancelDownload}
             collection={collection}
+            downloadStates={downloadStates}
           />
         </div>
       </main>

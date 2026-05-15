@@ -1,17 +1,24 @@
-import type { Video } from "../types";
+import type { Video, DownloadState } from "../types";
+import DownloadButton from "./DownloadButton";
 
 interface SearchResultsProps {
   results: Video[];
   onAddVideo: (video: Video) => void;
   onRemoveVideo: (id: string) => void;
+  onDownloadVideo: (video: Video) => void;
+  onCancelDownload: (id: string) => void;
   collection: Video[];
+  downloadStates: Record<string, DownloadState>;
 }
 
 export default function SearchResults({
   results,
   onAddVideo,
   onRemoveVideo,
+  onDownloadVideo,
+  onCancelDownload,
   collection,
+  downloadStates,
 }: SearchResultsProps) {
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -33,6 +40,7 @@ export default function SearchResults({
           const duration = formatDuration(video.duration);
           const isLive = duration.includes("NaN");
           const isInCollection = collection.some((v) => v.id === video.id);
+          const downloadState = downloadStates[video.id];
 
           return (
             <div
@@ -66,7 +74,12 @@ export default function SearchResults({
                   {video.title}
                 </h3>
                 <p className="mt-1 text-xs text-gray-400">{video.uploader}</p>
-                <div className="flex mt-auto justify-end">
+                <div className="flex mt-auto justify-end gap-1">
+                  <DownloadButton
+                    status={downloadState?.status || "idle"}
+                    onClick={() => onDownloadVideo(video)}
+                    onCancel={() => onCancelDownload(video.id)}
+                  />
                   <button
                     onClick={
                       isInCollection
