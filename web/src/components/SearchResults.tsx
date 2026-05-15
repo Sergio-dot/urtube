@@ -2,9 +2,17 @@ import type { Video } from "../types";
 
 interface SearchResultsProps {
   results: Video[];
+  onAddVideo: (video: Video) => void;
+  onRemoveVideo: (id: string) => void;
+  collection: Video[];
 }
 
-export default function SearchResults({ results }: SearchResultsProps) {
+export default function SearchResults({
+  results,
+  onAddVideo,
+  onRemoveVideo,
+  collection,
+}: SearchResultsProps) {
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -24,13 +32,14 @@ export default function SearchResults({ results }: SearchResultsProps) {
         {results.map((video) => {
           const duration = formatDuration(video.duration);
           const isLive = duration.includes("NaN");
+          const isInCollection = collection.some((v) => v.id === video.id);
 
           return (
             <div
               key={video.id}
-              className="group relative flex flex-col overflow-hidden rounded-2xl bg-white/5 ring-1 ring-inset ring-white/10 hover:bg-white/10 transition-all"
+              className="group relative flex flex-col overflow-hidden rounded-2xl bg-white/5 ring-1 ring-inset dark:ring-white/10 ring-black/10 hover:bg-white/10 transition-all"
             >
-              <div className="aspect-video w-full overflow-hidden bg-gray-800">
+              <div className="aspect-video w-full overflow-hidden bg-gray-800 border">
                 <img
                   src={video.thumbnails[video.thumbnails.length - 1]?.url}
                   alt={video.title}
@@ -53,26 +62,54 @@ export default function SearchResults({ results }: SearchResultsProps) {
                 )}
               </div>
               <div className="flex flex-1 flex-col p-4">
-                <h3 className="text-sm font-semibold text-white line-clamp-2">
+                <h3 className="text-sm font-semibold dark:text-white line-clamp-2">
                   {video.title}
                 </h3>
                 <p className="mt-1 text-xs text-gray-400">{video.uploader}</p>
-                <div className="mt-4 flex items-baseline justify-between">
-                  <button className="rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-400 ring-1 ring-inset ring-indigo-500/30 hover:bg-indigo-600 hover:text-white transition-all cursor-pointer">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="size-6"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
+                <div className="flex mt-auto justify-end">
+                  <button
+                    onClick={
+                      isInCollection
+                        ? () => onRemoveVideo(video.id)
+                        : () => onAddVideo(video)
+                    }
+                    className={`rounded-2xl px-1 py-1 text-xs font-semibold ring-1 ring-inset transition-all cursor-pointer ${
+                      isInCollection
+                        ? "text-green-400 ring-green-500/30 cursor-default"
+                        : "text-indigo-400 ring-indigo-500/30 hover:text-white"
+                    }`}
+                  >
+                    {isInCollection ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="size-6"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m4.5 12.75 6 6 9-13.5"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="size-6"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 4.5v15m7.5-7.5h-15"
+                        />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>

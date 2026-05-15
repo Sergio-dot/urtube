@@ -4,6 +4,7 @@ import Form from "./components/Form";
 import SearchResults from "./components/SearchResults";
 import ErrorModal from "./components/ErrorModal";
 import Footer from "./components/Footer";
+import CollectionPanel from "./components/CollectionPanel";
 import { useEffect, useState } from "react";
 import type { Video } from "./types";
 
@@ -14,6 +15,9 @@ function App() {
   const [results, setResults] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
   const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null);
+
+  const [collection, setCollection] = useState<Video[]>([]);
+  const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -41,10 +45,27 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  const addToCollection = (video: Video) => {
+    if (!collection.some((v) => v.id === video.id)) {
+      setCollection([...collection, video]);
+    }
+  };
+
+  const removeFromCollection = (videoId: string) => {
+    setCollection(collection.filter((v) => v.id !== videoId));
+  };
+
+  const clearCollection = () => {
+    setCollection([]);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <div className="navbar">
-        <Navbar />
+        <Navbar
+          onTogglePanel={() => setShowPanel(!showPanel)}
+          collectionSize={collection.length}
+        />
       </div>
 
       <main className="grow">
@@ -59,9 +80,22 @@ function App() {
         )}
 
         <div className="results">
-          <SearchResults results={results} />
+          <SearchResults
+            results={results}
+            onAddVideo={addToCollection}
+            onRemoveVideo={removeFromCollection}
+            collection={collection}
+          />
         </div>
       </main>
+
+      <CollectionPanel
+        isOpen={showPanel}
+        onClose={() => setShowPanel(false)}
+        videos={collection}
+        onRemoveVideo={removeFromCollection}
+        onClearCollection={clearCollection}
+      />
 
       <ErrorModal
         open={showError}
