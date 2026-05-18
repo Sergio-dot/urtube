@@ -19,11 +19,18 @@ export interface SelectOption {
   value: unknown;
 }
 
+export type DownloadType = "video" | "audio";
 export type DownloadStatus = "idle" | "loading" | "success" | "error";
+
+export interface DownloadOptions {
+  type: DownloadType;
+  format: string;
+}
 
 export interface DownloadState {
   videoId: string;
   status: DownloadStatus;
   progress?: number;
   errorMessage?: string;
+  options?: DownloadOptions;
 }

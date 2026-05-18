@@ -7,6 +7,7 @@ interface CollectionPanelProps {
   videos: Video[];
   onRemoveVideo: (videoId: string) => void;
   onClearCollection: () => void;
+  onDownloadAll: () => void;
 }
 
 export default function CollectionPanel({
@@ -15,6 +16,7 @@ export default function CollectionPanel({
   videos,
   onRemoveVideo,
   onClearCollection,
+  onDownloadAll,
 }: CollectionPanelProps) {
   return (
     <>
@@ -86,7 +88,10 @@ export default function CollectionPanel({
               >
                 Clear All
               </button>
-              <button className="mt-2 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">
+              <button
+                onClick={onDownloadAll}
+                className="mt-2 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
                 Download All
               </button>
             </div>
