@@ -5,8 +5,11 @@ import SearchResults from "./components/SearchResults";
 import ErrorModal from "./components/ErrorModal";
 import Footer from "./components/Footer";
 import CollectionPanel from "./components/CollectionPanel";
+import DownloadModal from "./components/DownloadModal";
 import { useEffect, useState } from "react";
-import type { Video, DownloadState } from "./types";
+import type { Video, DownloadState, DownloadOptions } from "./types";
+
+const PREFERENCES_KEY = "urtube_download_preferences";
 
 function App() {
   const [showError, setShowError] = useState(false);
@@ -22,6 +25,16 @@ function App() {
   const [downloadStates, setDownloadStates] = useState<
     Record<string, DownloadState>
   >({});
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
+  const [videoToDownload, setVideoToDownload] = useState<
+    Video | Video[] | null
+  >(null);
+  const [preferences, setPreferences] = useState<DownloadOptions>(() => {
+    const saved = localStorage.getItem(PREFERENCES_KEY);
+    return saved ? JSON.parse(saved) : { type: "video", format: "mp4" };
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -63,7 +76,24 @@ function App() {
     setCollection([]);
   };
 
-  const downloadVideo = async (video: Video) => {
+  const handleDownloadRequest = (video: Video | Video[]) => {
+    setVideoToDownload(video);
+    setModalKey((prev) => prev + 1);
+    setIsModalOpen(true);
+  };
+
+  const confirmDownload = (options: DownloadOptions) => {
+    setPreferences(options);
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(options));
+
+    if (Array.isArray(videoToDownload)) {
+      videoToDownload.forEach((v) => performDownload(v, options));
+    } else if (videoToDownload) {
+      performDownload(videoToDownload, options);
+    }
+  };
+
+  const performDownload = async (video: Video, options: DownloadOptions) => {
     // Prevent multiple downloads of the same video if already loading or success
     if (
       downloadStates[video.id]?.status === "loading" ||
@@ -74,14 +104,32 @@ function App() {
 
     setDownloadStates((prev) => ({
       ...prev,
-      [video.id]: { videoId: video.id, status: "loading" },
+      [video.id]: { videoId: video.id, status: "loading", options },
     }));
 
     try {
+      const flags: any = {};
+      if (options.type === "audio") {
+        flags.post_processing = {
+          extract_audio: true,
+          audio_format: options.format,
+        };
+      } else {
+        flags.video_format = {
+          format: "bestvideo+bestaudio/best",
+        };
+        flags.post_processing = {
+          recode_video: options.format,
+        };
+      }
+
       const response = await fetch("/api/v1/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: video.url }),
+        body: JSON.stringify({
+          url: video.url,
+          flags: flags,
+        }),
       });
 
       if (!response.ok) {
@@ -91,7 +139,7 @@ function App() {
 
       setDownloadStates((prev) => ({
         ...prev,
-        [video.id]: { videoId: video.id, status: "success" },
+        [video.id]: { videoId: video.id, status: "success", options },
       }));
     } catch (error) {
       console.error("Download error:", error);
@@ -102,6 +150,7 @@ function App() {
           status: "error",
           errorMessage:
             error instanceof Error ? error.message : "Unknown error",
+          options,
         },
       }));
     }
@@ -142,7 +191,7 @@ function App() {
             results={results}
             onAddVideo={addToCollection}
             onRemoveVideo={removeFromCollection}
-            onDownloadVideo={downloadVideo}
+            onDownloadVideo={handleDownloadRequest}
             onCancelDownload={cancelDownload}
             collection={collection}
             downloadStates={downloadStates}
@@ -156,6 +205,22 @@ function App() {
         videos={collection}
         onRemoveVideo={removeFromCollection}
         onClearCollection={clearCollection}
+        onDownloadAll={() => handleDownloadRequest(collection)}
+      />
+
+      <DownloadModal
+        key={modalKey}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={confirmDownload}
+        title={
+          videoToDownload
+            ? Array.isArray(videoToDownload)
+              ? `Download Collection (${videoToDownload.length} items)`
+              : `Download ${videoToDownload.title}`
+            : "Download Preferences"
+        }
+        initialOptions={preferences}
       />
 
       <ErrorModal
