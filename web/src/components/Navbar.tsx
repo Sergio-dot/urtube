@@ -25,10 +25,10 @@ function classNames(...classes: string[]) {
 
 export default function Navbar({
   onTogglePanel,
-  collectionSize,
+  queueSize,
 }: {
   onTogglePanel: () => void;
-  collectionSize: number;
+  queueSize: number;
 }) {
   const { theme, toggleTheme } = useTheme();
   return (
@@ -91,9 +91,9 @@ export default function Navbar({
               onClick={onTogglePanel}
               className="relative rounded-full p-1 text-gray-500 hover:text-gray-900 focus:outline-2 dark:text-gray-400 dark:hover:text-white"
             >
-              {collectionSize > 0 && (
+              {queueSize > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
-                  {collectionSize}
+                  {queueSize}
                 </span>
               )}
               <svg

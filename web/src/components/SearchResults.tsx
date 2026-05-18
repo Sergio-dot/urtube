@@ -7,7 +7,7 @@ interface SearchResultsProps {
   onRemoveVideo: (id: string) => void;
   onDownloadVideo: (video: Video) => void;
   onCancelDownload: (id: string) => void;
-  collection: Video[];
+  queue: Video[];
   downloadStates: Record<string, DownloadState>;
 }
 
@@ -17,7 +17,7 @@ export default function SearchResults({
   onRemoveVideo,
   onDownloadVideo,
   onCancelDownload,
-  collection,
+  queue,
   downloadStates,
 }: SearchResultsProps) {
   const formatDuration = (seconds: number) => {
@@ -39,7 +39,7 @@ export default function SearchResults({
         {results.map((video) => {
           const duration = formatDuration(video.duration);
           const isLive = duration.includes("NaN");
-          const isInCollection = collection.some((v) => v.id === video.id);
+          const isInQueue = queue.some((v) => v.id === video.id);
           const downloadState = downloadStates[video.id];
 
           return (
@@ -82,17 +82,17 @@ export default function SearchResults({
                   />
                   <button
                     onClick={
-                      isInCollection
+                      isInQueue
                         ? () => onRemoveVideo(video.id)
                         : () => onAddVideo(video)
                     }
                     className={`rounded-2xl px-1 py-1 text-xs font-semibold ring-1 ring-inset transition-all cursor-pointer ${
-                      isInCollection
+                      isInQueue
                         ? "text-green-400 ring-green-500/30 cursor-default"
                         : "text-indigo-400 ring-indigo-500/30 hover:text-white"
                     }`}
                   >
-                    {isInCollection ? (
+                    {isInQueue ? (
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
