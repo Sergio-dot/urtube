@@ -4,12 +4,13 @@ import Form from "./components/Form";
 import SearchResults from "./components/SearchResults";
 import ErrorModal from "./components/ErrorModal";
 import Footer from "./components/Footer";
-import CollectionPanel from "./components/CollectionPanel";
+import QueuePanel from "./components/QueuePanel";
 import DownloadModal from "./components/DownloadModal";
 import { useEffect, useState } from "react";
 import type { Video, DownloadState, DownloadOptions } from "./types";
 
 const PREFERENCES_KEY = "urtube_download_preferences";
+const QUEUE_KEY = "urtube_video_queue";
 
 function App() {
   const [showError, setShowError] = useState(false);
@@ -19,7 +20,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null);
 
-  const [collection, setCollection] = useState<Video[]>([]);
+  const [queue, setQueue] = useState<Video[]>(() => {
+    const saved = localStorage.getItem(QUEUE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [showPanel, setShowPanel] = useState(false);
 
   const [downloadStates, setDownloadStates] = useState<
@@ -35,6 +39,14 @@ function App() {
     const saved = localStorage.getItem(PREFERENCES_KEY);
     return saved ? JSON.parse(saved) : { type: "video", format: "mp4" };
   });
+
+  useEffect(() => {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  }, [queue]);
+
+  useEffect(() => {
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+  }, [preferences]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -62,18 +74,18 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  const addToCollection = (video: Video) => {
-    if (!collection.some((v) => v.id === video.id)) {
-      setCollection([...collection, video]);
+  const addToQueue = (video: Video) => {
+    if (!queue.some((v) => v.id === video.id)) {
+      setQueue([...queue, video]);
     }
   };
 
-  const removeFromCollection = (videoId: string) => {
-    setCollection(collection.filter((v) => v.id !== videoId));
+  const removeFromQueue = (videoId: string) => {
+    setQueue(queue.filter((v) => v.id !== videoId));
   };
 
-  const clearCollection = () => {
-    setCollection([]);
+  const clearQueue = () => {
+    setQueue([]);
   };
 
   const handleDownloadRequest = (video: Video | Video[]) => {
@@ -84,7 +96,6 @@ function App() {
 
   const confirmDownload = (options: DownloadOptions) => {
     setPreferences(options);
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(options));
 
     if (Array.isArray(videoToDownload)) {
       videoToDownload.forEach((v) => performDownload(v, options));
@@ -108,7 +119,10 @@ function App() {
     }));
 
     try {
-      const flags: any = {};
+      const flags: {
+        post_processing?: Record<string, string | boolean>;
+        video_format?: Record<string, string>;
+      } = {};
       if (options.type === "audio") {
         flags.post_processing = {
           extract_audio: true,
@@ -171,7 +185,7 @@ function App() {
       <div className="navbar">
         <Navbar
           onTogglePanel={() => setShowPanel(!showPanel)}
-          collectionSize={collection.length}
+          queueSize={queue.length}
         />
       </div>
 
@@ -189,23 +203,23 @@ function App() {
         <div className="results">
           <SearchResults
             results={results}
-            onAddVideo={addToCollection}
-            onRemoveVideo={removeFromCollection}
+            onAddVideo={addToQueue}
+            onRemoveVideo={removeFromQueue}
             onDownloadVideo={handleDownloadRequest}
             onCancelDownload={cancelDownload}
-            collection={collection}
+            queue={queue}
             downloadStates={downloadStates}
           />
         </div>
       </main>
 
-      <CollectionPanel
+      <QueuePanel
         isOpen={showPanel}
         onClose={() => setShowPanel(false)}
-        videos={collection}
-        onRemoveVideo={removeFromCollection}
-        onClearCollection={clearCollection}
-        onDownloadAll={() => handleDownloadRequest(collection)}
+        videos={queue}
+        onRemoveVideo={removeFromQueue}
+        onClearQueue={clearQueue}
+        onDownloadAll={() => handleDownloadRequest(queue)}
       />
 
       <DownloadModal
@@ -216,7 +230,7 @@ function App() {
         title={
           videoToDownload
             ? Array.isArray(videoToDownload)
-              ? `Download Collection (${videoToDownload.length} items)`
+              ? `Download Queue (${videoToDownload.length} items)`
               : `Download ${videoToDownload.title}`
             : "Download Preferences"
         }
