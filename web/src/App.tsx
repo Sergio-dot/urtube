@@ -6,8 +6,16 @@ import ErrorModal from "./components/ErrorModal";
 import Footer from "./components/Footer";
 import QueuePanel from "./components/QueuePanel";
 import DownloadModal from "./components/DownloadModal";
-import { useEffect, useState } from "react";
-import type { Video, DownloadState, DownloadOptions } from "./types";
+import DownloadStatusOverlay from "./components/DownloadStatusOverlay";
+import { useEffect, useState, useCallback } from "react";
+import type {
+  Video,
+  DownloadState,
+  DownloadOptions,
+  ProgressUpdate,
+  DownloadStatus,
+} from "./types";
+import { useDownloadEvents } from "./hooks/useDownloadEvents";
 
 const PREFERENCES_KEY = "urtube_download_preferences";
 const QUEUE_KEY = "urtube_video_queue";
@@ -26,6 +34,7 @@ function App() {
   });
   const [showPanel, setShowPanel] = useState(false);
 
+  // downloadStates is now keyed by download ID (UUID)
   const [downloadStates, setDownloadStates] = useState<
     Record<string, DownloadState>
   >({});
@@ -39,6 +48,30 @@ function App() {
     const saved = localStorage.getItem(PREFERENCES_KEY);
     return saved ? JSON.parse(saved) : { type: "video", format: "mp4" };
   });
+
+  const handleProgressUpdate = useCallback((update: ProgressUpdate) => {
+    setDownloadStates((prev) => {
+      const existing = prev[update.uuid];
+      // Only update if we already have it OR if it's a new UUID we haven't seen.
+      // We merge with 'existing' to preserve the 'title' and 'videoId' added by performDownload.
+      return {
+        ...prev,
+        [update.uuid]: {
+          ...(existing || {}),
+          uuid: update.uuid,
+          status: update.status as DownloadStatus,
+          percent: update.percent,
+          speed: update.speed,
+          eta: update.eta,
+          downloaded: update.downloaded,
+          total: update.total,
+          errorMessage: update.errorMessage,
+        },
+      };
+    });
+  }, []);
+
+  useDownloadEvents(handleProgressUpdate);
 
   useEffect(() => {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
@@ -105,19 +138,6 @@ function App() {
   };
 
   const performDownload = async (video: Video, options: DownloadOptions) => {
-    // Prevent multiple downloads of the same video if already loading or success
-    if (
-      downloadStates[video.id]?.status === "loading" ||
-      downloadStates[video.id]?.status === "success"
-    ) {
-      return;
-    }
-
-    setDownloadStates((prev) => ({
-      ...prev,
-      [video.id]: { videoId: video.id, status: "loading", options },
-    }));
-
     try {
       const flags: {
         post_processing?: Record<string, string | boolean>;
@@ -151,34 +171,62 @@ function App() {
         throw new Error(errorData.message || "Failed to start download");
       }
 
-      setDownloadStates((prev) => ({
-        ...prev,
-        [video.id]: { videoId: video.id, status: "success", options },
-      }));
+      const data = await response.json();
+      const downloadUUID = data.uuid;
+
+      setDownloadStates((prev) => {
+        const existing = prev[downloadUUID];
+        return {
+          ...prev,
+          [downloadUUID]: {
+            ...existing,
+            uuid: downloadUUID,
+            videoId: video.id,
+            title: video.title,
+            status: existing?.status || "loading",
+            options,
+          },
+        };
+      });
     } catch (error) {
       console.error("Download error:", error);
-      setDownloadStates((prev) => ({
-        ...prev,
-        [video.id]: {
-          videoId: video.id,
-          status: "error",
-          errorMessage:
-            error instanceof Error ? error.message : "Unknown error",
-          options,
-        },
-      }));
+      // For errors that happen before we get a download ID, we just show an error modal
+      setErrorTitle("Download Failed");
+      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+      setShowError(true);
     }
   };
 
-  const cancelDownload = (videoId: string) => {
-    // TODO: BE endpoint implementation is missing, for now just reset the UI state.
-    // After implementation, send a DELETE/POST to endpoint e.g. /api/v1/download/cancel/:id
+  const removeDownload = (id: string) => {
     setDownloadStates((prev) => {
       const newState = { ...prev };
-      delete newState[videoId];
+      delete newState[id];
       return newState;
     });
   };
+
+  const downloadsArray = Object.values(downloadStates).reverse();
+
+  // Map videoId to status for SearchResults UI (green checkmark, etc.)
+  const videoStatusMap = Object.values(downloadStates).reduce(
+    (acc, dl) => {
+      if (dl.videoId) {
+        const current = acc[dl.videoId];
+        // Priority: finished > downloading > loading > error
+        if (current?.status === "finished" || current?.status === "success")
+          return acc;
+        if (
+          current?.status === "downloading" &&
+          (dl.status === "loading" || dl.status === "error")
+        )
+          return acc;
+
+        acc[dl.videoId] = dl;
+      }
+      return acc;
+    },
+    {} as Record<string, DownloadState>,
+  );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -206,9 +254,9 @@ function App() {
             onAddVideo={addToQueue}
             onRemoveVideo={removeFromQueue}
             onDownloadVideo={handleDownloadRequest}
-            onCancelDownload={cancelDownload}
+            onCancelDownload={removeDownload}
             queue={queue}
-            downloadStates={downloadStates}
+            downloadStates={videoStatusMap}
           />
         </div>
       </main>
@@ -235,6 +283,11 @@ function App() {
             : "Download Preferences"
         }
         initialOptions={preferences}
+      />
+
+      <DownloadStatusOverlay
+        downloads={downloadsArray}
+        onRemove={removeDownload}
       />
 
       <ErrorModal
