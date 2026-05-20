@@ -5,7 +5,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/download"
@@ -24,20 +26,31 @@ func (m *mockSearcher) Search(ctx context.Context, param string, limit int, want
 }
 
 type mockDownloader struct {
-	Called bool
+	mu     sync.Mutex
+	called bool
 }
 
-func (m *mockDownloader) Download(ctx context.Context, body *download.DownloadRequest) error {
-	m.Called = true
+func (m *mockDownloader) Download(ctx context.Context, body *download.DownloadRequest, onProgress func(download.ProgressUpdate)) error {
+	m.mu.Lock()
+	m.called = true
+	m.mu.Unlock()
 	return nil
+}
+
+func (m *mockDownloader) isCalled() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.called
 }
 
 func TestNewRouter_Routes(t *testing.T) {
 	ms := &mockSearcher{}
 	md := &mockDownloader{}
+	mgr := download.NewDownloadManager(md)
+
 	r := NewRouter(Dependencies{
-		Searcher:   ms,
-		Downloader: md,
+		Searcher: ms,
+		Manager:  mgr,
 		Config: config.Config{
 			ServerHost:     "localhost",
 			ServerPort:     "8080",
@@ -55,16 +68,42 @@ func TestNewRouter_Routes(t *testing.T) {
 		r.ServeHTTP(w, req)
 
 		assert.True(t, ms.Called, "Expected search handler to be invoked")
-		assert.Equal(t, http.StatusNotFound, w.Code) // ErrNoResults configured in mock returns 404
+		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	t.Run("POST /api/v1/download", func(t *testing.T) {
-		body := []byte(`{"url":"https://example.com","preset_alias":"audio"}`)
+		body := []byte(`{"url":"https://example.com"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/download", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		assert.True(t, md.Called, "Expected download handler to be invoked")
-		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+
+		// Wait a bit for the async goroutine to set the flag
+		assert.Eventually(t, func() bool {
+			return md.isCalled()
+		}, 1*time.Second, 10*time.Millisecond, "Expected download handler to be invoked through manager")
+	})
+
+	t.Run("GET /api/v1/events", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+		w := httptest.NewRecorder()
+		
+		ctx, cancel := context.WithCancel(context.Background())
+		req = req.WithContext(ctx)
+		
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.ServeHTTP(w, req)
+		}()
+		
+		// Wait long enough for headers to be written
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+		wg.Wait()
+
+		assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 	})
 }
