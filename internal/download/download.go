@@ -3,7 +3,9 @@ package download
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/Sergio-dot/urtube/pkg/strutils"
 	"github.com/lrstanley/go-ytdlp"
@@ -11,7 +13,17 @@ import (
 
 // Downloader is an interface for downloading videos.
 type Downloader interface {
-	Download(ctx context.Context, body *DownloadRequest) error
+	Download(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error
+}
+
+type ProgressUpdate struct {
+	UUID         string `json:"uuid"`
+	Status       string `json:"status"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	Percent      string `json:"percent"`
+	ETA          string `json:"eta"`
+	Downloaded   string `json:"downloaded"`
+	Total        string `json:"total"`
 }
 
 // YtdlpDownloader is a downloader that uses ytdlp.
@@ -40,10 +52,11 @@ func (r *DownloadRequest) Validate() error {
 }
 
 // Download downloads a video using ytdlp.
-func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) error {
+func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
 	cmd := ytdlp.New().
 		SetExecutable("yt-dlp").
-		NoUpdate()
+		NoUpdate().
+		Newline() // Force progress on new lines for parsing
 
 	if body.Flags != nil {
 		cmd.SetFlagConfig(body.Flags)
@@ -61,7 +74,32 @@ func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest) e
 		}
 	}
 
+	if onProgress != nil {
+		cmd.ProgressFunc(100*time.Millisecond, func(progress ytdlp.ProgressUpdate) {
+			onProgress(ProgressUpdate{
+				Status:     "downloading",
+				Percent:    progress.PercentString(),
+				ETA:        progress.ETA().String(),
+				Downloaded: formatBytes(progress.DownloadedBytes),
+				Total:      formatBytes(progress.TotalBytes),
+			})
+		})
+	}
+
 	_, err := cmd.Run(ctx, body.URL)
 
 	return err
+}
+
+func formatBytes(b int) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
