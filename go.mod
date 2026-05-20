@@ -5,6 +5,7 @@ go 1.25.4
 require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/httplog/v2 v2.1.1
+	github.com/google/uuid v1.6.0
 	github.com/lrstanley/go-ytdlp v1.3.5
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1

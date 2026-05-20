@@ -37,11 +37,13 @@ func main() {
 
 	slog.SetDefault(logger)
 
+	dl := &download.YtdlpDownloader{DownloadDir: cfg.DownloadDir}
+	manager := download.NewDownloadManager(dl)
 	router := router.NewRouter(router.Dependencies{
-		Searcher:   &search.YtdlpSearcher{},
-		Downloader: &download.YtdlpDownloader{DownloadDir: cfg.DownloadDir},
-		Config:     *cfg,
-		UI:         uiFS,
+		Searcher: &search.YtdlpSearcher{},
+		Manager:  manager,
+		Config:   *cfg,
+		UI:       uiFS,
 	})
 
 	srv, err := server.NewServer(fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort), router)

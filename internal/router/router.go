@@ -21,10 +21,10 @@ import (
 
 // Dependencies holds the application dependencies.
 type Dependencies struct {
-	Searcher   search.Searcher
-	Downloader download.Downloader
-	Config     config.Config
-	UI         embed.FS
+	Searcher search.Searcher
+	Manager  *download.DownloadManager
+	Config   config.Config
+	UI       embed.FS
 }
 
 // NewRouter creates and returns a new HTTP handler with the defined routes.
@@ -49,7 +49,6 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Use(middleware.CleanPath)
 	r.Use(httplog.RequestLogger(httpLogger))
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(time.Second * 30))
 	r.Use(middleware.Heartbeat("/healthz"))
 
 	r.Mount("/api/v1", routerV1(deps))
@@ -96,8 +95,14 @@ func routerV1(deps Dependencies) http.Handler {
 	v1 := chi.NewRouter()
 
 	v1.Get("/health", httputils.MakeHandler(handlers.HealthHandler))
-	v1.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchMedia))
-	v1.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Downloader: deps.Downloader}).DownloadMedia))
+	v1.Get("/events", httputils.MakeHandler((&handlers.EventsHandler{Manager: deps.Manager}).HandleEvents))
+
+	v1.Group(func(r chi.Router) {
+		r.Use(middleware.Timeout(time.Second * 30))
+
+		r.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchMedia))
+		r.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Manager: deps.Manager}).DownloadMedia))
+	})
 
 	return v1
 }

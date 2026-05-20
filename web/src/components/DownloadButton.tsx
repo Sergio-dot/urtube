@@ -16,6 +16,7 @@ export default function DownloadButton({
 
   const getIcon = () => {
     switch (status) {
+      case "downloading":
       case "loading":
         if (isHovered && onCancel) {
           // X Icon for Cancel

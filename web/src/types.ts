@@ -20,17 +20,51 @@ export interface SelectOption {
 }
 
 export type DownloadType = "video" | "audio";
-export type DownloadStatus = "idle" | "loading" | "success" | "error";
+export type DownloadStatus =
+  | "idle"
+  | "loading"
+  | "success"
+  | "error"
+  | "downloading"
+  | "finished";
 
 export interface DownloadOptions {
   type: DownloadType;
   format: string;
 }
 
+export interface YtdlpProgress {
+  status: string;
+  downloaded_bytes: number;
+  total_bytes: number;
+  total_bytes_estimate: number;
+  percent_string: string;
+  eta_string: string;
+  speed_string: string;
+  filename: string;
+}
+
+export interface ProgressUpdate {
+  uuid: string;
+  status: "downloading" | "finished" | "error";
+  errorMessage?: string;
+  percent: string;
+  speed: string;
+  eta: string;
+  downloaded: string;
+  total: string;
+}
+
 export interface DownloadState {
-  videoId: string;
+  uuid: string;
+  videoId?: string;
+  title?: string;
   status: DownloadStatus;
-  progress?: number;
+  percent?: string;
+  speed?: string;
+  eta?: string;
+  downloaded?: string;
+  total?: string;
   errorMessage?: string;
   options?: DownloadOptions;
 }
