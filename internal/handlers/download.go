@@ -10,13 +10,13 @@ import (
 
 // DownloadHandler is the handler for the download video request.
 type DownloadHandler struct {
-	Downloader download.Downloader
+	Manager *download.DownloadManager
 }
 
 // DownloadMedia handles the download media request.
 func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) error {
-	if h.Downloader == nil {
-		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "downloader not available"}
+	if h.Manager == nil {
+		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "download manager not available"}
 	}
 
 	var body download.DownloadRequest
@@ -28,10 +28,15 @@ func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) 
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: err.Error()}
 	}
 
-	if err := h.Downloader.Download(r.Context(), &body); err != nil {
+	downloadUUID, err := h.Manager.StartDownload(r.Context(), &body)
+	if err != nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "failed to download video: " + err.Error()}
 	}
 
-	httputils.WriteJSON(w, http.StatusOK, map[string]string{"message": "download successful"})
+	httputils.WriteJSON(w, http.StatusAccepted, map[string]string{
+		"uuid":    downloadUUID,
+		"message": "download started",
+	})
+
 	return nil
 }
