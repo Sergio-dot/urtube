@@ -10,6 +10,7 @@ import (
 
 // Searcher is an interface for searching videos.
 type Searcher interface {
+	// Search searches for videos based on the provided parameters.
 	Search(ctx context.Context, param string, limit int, wantLiveStream bool) ([]*ytdlp.ExtractedInfo, error)
 }
 

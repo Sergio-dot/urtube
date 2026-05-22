@@ -10,6 +10,7 @@ import (
 
 // DownloadHandler is the handler for the download video request.
 type DownloadHandler struct {
+	// Manager is the download manager used to start downloads.
 	Manager *download.DownloadManager
 }
 
