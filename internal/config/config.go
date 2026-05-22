@@ -10,12 +10,19 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	ServerHost     string
-	ServerPort     string
-	DownloadDir    string
-	LogLevel       string
-	JSON           bool
-	Concise        bool
+	// ServerHost is the host the server will bind to.
+	ServerHost string
+	// ServerPort is the port the server will bind to.
+	ServerPort string
+	// DownloadDir is the directory where downloads will be saved.
+	DownloadDir string
+	// LogLevel is the logging level (e.g., info, debug, error).
+	LogLevel string
+	// JSON indicates if logging should be in JSON format.
+	JSON bool
+	// Concise indicates if logging should be concise.
+	Concise bool
+	// RequestHeaders indicates if request headers should be logged.
 	RequestHeaders bool
 }
 

@@ -8,10 +8,13 @@ import (
 	"github.com/Sergio-dot/urtube/internal/download"
 )
 
+// EventsHandler handles Server-Sent Events (SSE) for download progress updates.
 type EventsHandler struct {
+	// Manager is the download manager used to subscribe to progress updates.
 	Manager *download.DownloadManager
 }
 
+// HandleEvents establishes an SSE connection and streams download progress updates.
 func (h *EventsHandler) HandleEvents(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

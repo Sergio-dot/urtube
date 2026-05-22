@@ -11,9 +11,13 @@ import (
 
 // HealthResponse represents the health status of the application.
 type HealthResponse struct {
-	Status       string `json:"status"`
+	// Status is the general health status of the application (e.g., ok, degraded).
+	Status string `json:"status"`
+	// Dependencies contains the health status of the application's dependencies.
 	Dependencies struct {
-		Ytdlp   bool   `json:"ytdlp"`
+		// Ytdlp indicates if the yt-dlp executable is available.
+		Ytdlp bool `json:"ytdlp"`
+		// Version is the version of the yt-dlp executable.
 		Version string `json:"version,omitempty"`
 	} `json:"dependencies"`
 }

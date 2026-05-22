@@ -21,10 +21,14 @@ import (
 
 // Dependencies holds the application dependencies.
 type Dependencies struct {
+	// Searcher is the searcher used to find videos.
 	Searcher search.Searcher
-	Manager  *download.DownloadManager
-	Config   config.Config
-	UI       embed.FS
+	// Manager is the download manager used to start downloads and subscribe to updates.
+	Manager *download.DownloadManager
+	// Config is the application configuration.
+	Config config.Config
+	// UI is the filesystem containing the UI assets.
+	UI embed.FS
 }
 
 // NewRouter creates and returns a new HTTP handler with the defined routes.

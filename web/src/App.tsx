@@ -59,6 +59,8 @@ function App() {
         [update.uuid]: {
           ...(existing || {}),
           uuid: update.uuid,
+          videoId: update.videoId,
+          title: update.title,
           status: update.status as DownloadStatus,
           percent: update.percent,
           speed: update.speed,
@@ -135,6 +137,9 @@ function App() {
     } else if (videoToDownload) {
       performDownload(videoToDownload, options);
     }
+
+    clearQueue();
+    setShowPanel(false);
   };
 
   const performDownload = async (video: Video, options: DownloadOptions) => {
@@ -162,6 +167,8 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: video.url,
+          videoId: video.id,
+          title: video.title,
           flags: flags,
         }),
       });

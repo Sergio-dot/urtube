@@ -13,6 +13,7 @@ import (
 
 // SearchHandler is the handler for the search video request.
 type SearchHandler struct {
+	// Searcher is the searcher used to find videos.
 	Searcher search.Searcher
 }
 
