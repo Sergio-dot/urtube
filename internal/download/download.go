@@ -101,6 +101,8 @@ func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest, o
 		cmd.ProgressFunc(100*time.Millisecond, func(progress ytdlp.ProgressUpdate) {
 			onProgress(ProgressUpdate{
 				Status:     "downloading",
+				VideoID:    body.VideoID,
+				Title:      body.Title,
 				Percent:    progress.PercentString(),
 				ETA:        progress.ETA().String(),
 				Downloaded: formatBytes(progress.DownloadedBytes),

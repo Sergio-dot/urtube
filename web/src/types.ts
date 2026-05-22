@@ -46,6 +46,8 @@ export interface YtdlpProgress {
 
 export interface ProgressUpdate {
   uuid: string;
+  videoId: string;
+  title: string;
   status: "downloading" | "finished" | "error";
   errorMessage?: string;
   percent: string;

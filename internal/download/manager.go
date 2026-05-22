@@ -31,25 +31,39 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 		// as soon as the HTTP handler returns.
 		bgCtx := context.Background()
 
-		m.broadcast(ProgressUpdate{UUID: u.String(), Status: "downloading"})
+		m.broadcast(ProgressUpdate{
+			UUID:    u.String(),
+			VideoID: req.VideoID,
+			Title:   req.Title,
+			Status:  "downloading",
+		})
 
 		err := m.downloader.Download(bgCtx, req, func(p ProgressUpdate) {
 			p.UUID = u.String()
+			p.VideoID = req.VideoID
+			p.Title = req.Title
 			p.Status = "downloading"
 			m.broadcast(p)
 		})
 
-
 		if err != nil {
 			m.broadcast(ProgressUpdate{
 				UUID:         u.String(),
+				VideoID:      req.VideoID,
+				Title:        req.Title,
 				Status:       "error",
 				ErrorMessage: err.Error(),
 			})
 		} else {
-			m.broadcast(ProgressUpdate{UUID: u.String(), Status: "finished"})
+			m.broadcast(ProgressUpdate{
+				UUID:    u.String(),
+				VideoID: req.VideoID,
+				Title:   req.Title,
+				Status:  "finished",
+			})
 		}
 	}()
+
 
 	return u.String(), nil
 }
