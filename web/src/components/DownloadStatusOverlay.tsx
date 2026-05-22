@@ -25,8 +25,12 @@ export default function DownloadStatusOverlay({
     (d) => d.status === "downloading" || d.status === "loading",
   ).length;
 
+  const truncateSeconds = (durationStr: string | undefined) => {
+    return (durationStr || "--").replace(/(\d+)\.(\d+)s$/, "$1s");
+  };
+
   return (
-    <div className="fixed bottom-4 right-4 z-[100] w-80 overflow-hidden rounded-lg border bg-white shadow-2xl transition-all duration-300 dark:border-white/10 dark:bg-gray-900">
+    <div className="fixed bottom-4 left-4 z-100 w-80 overflow-hidden rounded-lg border bg-white shadow-2xl transition-all duration-300 dark:border-white/10 dark:bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b bg-gray-50 p-3 dark:border-white/10 dark:bg-white/5">
         <h3 className="text-sm font-semibold dark:text-white">
@@ -115,7 +119,7 @@ export default function DownloadStatusOverlay({
                     ? `${dl.downloaded} / ${dl.total}`
                     : dl.speed || "--"}
                 </span>
-                <span>{dl.eta || "--"}</span>
+                <span>{truncateSeconds(dl.eta) || "--"}</span>
               </div>
             </div>
           ))}
