@@ -62,6 +62,15 @@ func TestNewRouter_Routes(t *testing.T) {
 		},
 	})
 
+	t.Run("GET /healthz", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	})
+
 	t.Run("GET /api/v1/search/{searchParam}", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/search/test", nil)
 		w := httptest.NewRecorder()
@@ -99,8 +108,10 @@ func TestNewRouter_Routes(t *testing.T) {
 			r.ServeHTTP(w, req)
 		}()
 		
-		// Wait long enough for headers to be written
-		time.Sleep(100 * time.Millisecond)
+		// Wait deterministically for headers to be written
+		assert.Eventually(t, func() bool {
+			return w.Header().Get("Content-Type") != ""
+		}, 1*time.Second, 5*time.Millisecond)
 		cancel()
 		wg.Wait()
 
