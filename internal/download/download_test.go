@@ -67,6 +67,11 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 			url:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 			expectedError: nil,
 		},
+		{
+			name:          "Download failure - invalid URL",
+			url:           "https://example.com/invalid_video",
+			expectedError: errors.New("download failed"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -147,7 +152,9 @@ func TestDownloadManager(t *testing.T) {
 		ch := manager.Subscribe()
 		defer manager.Unsubscribe(ch)
 
-		manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		uuid, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+		assert.NotEmpty(t, uuid)
 
 		timeout := time.After(1 * time.Second)
 		var lastStatus string
@@ -170,4 +177,75 @@ func TestDownloadManager(t *testing.T) {
 		assert.Equal(t, "error", lastStatus)
 		assert.Equal(t, "failed", errMsg)
 	})
+}
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected string
+	}{
+		{name: "negative value", input: -10, expected: "0 B"},
+		{name: "zero bytes", input: 0, expected: "0 B"},
+		{name: "bytes", input: 500, expected: "500 B"},
+		{name: "KB", input: 1024, expected: "1.0 KiB"},
+		{name: "MB", input: 1024 * 1024 * 5, expected: "5.0 MiB"},
+		{name: "GB", input: 1024 * 1024 * 1024 * 2, expected: "2.0 GiB"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, formatBytes(tt.input))
+		})
+	}
+}
+
+func TestDownloadManager_CancelDownload(t *testing.T) {
+	mock := &mockDownloader{
+		DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(2 * time.Second):
+				return nil
+			}
+		},
+	}
+
+	manager := NewDownloadManager(mock)
+	ch := manager.Subscribe()
+	defer manager.Unsubscribe(ch)
+
+	uuid, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, uuid)
+
+	// Wait a moment for goroutine to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Cancel it
+	ok := manager.CancelDownload(uuid)
+	assert.True(t, ok)
+
+	// We expect the status to end up as "error" with context.Canceled error message
+	timeout := time.After(1 * time.Second)
+	var lastStatus string
+	var errMsg string
+
+loop:
+	for {
+		select {
+		case p := <-ch:
+			lastStatus = p.Status
+			errMsg = p.ErrorMessage
+			if p.Status == "error" {
+				break loop
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for cancelled status")
+		}
+	}
+
+	assert.Equal(t, "error", lastStatus)
+	assert.Contains(t, errMsg, "context canceled")
 }

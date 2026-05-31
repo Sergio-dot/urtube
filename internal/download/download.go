@@ -117,14 +117,18 @@ func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest, o
 }
 
 func formatBytes(b int) string {
+	val := int64(b)
 	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
+	if val < 0 {
+		return "0 B"
+	}
+	if val < unit {
+		return fmt.Sprintf("%d B", val)
 	}
 	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
+	for n := val / unit; n >= unit; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f %ciB", float64(val)/float64(div), "KMGTPE"[exp])
 }

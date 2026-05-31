@@ -9,37 +9,49 @@ import (
 
 // DownloadManager manages video downloads and subscriptions for progress updates.
 type DownloadManager struct {
-	downloader  Downloader
-	subscribers []chan ProgressUpdate
-	mux         sync.RWMutex
+	downloader    Downloader
+	subscribers   []chan ProgressUpdate
+	cancellations map[string]context.CancelFunc
+	mux           sync.RWMutex
 }
 
 // NewDownloadManager creates and returns a new DownloadManager.
 func NewDownloadManager(downloader Downloader) *DownloadManager {
 	return &DownloadManager{
-		downloader:  downloader,
-		subscribers: make([]chan ProgressUpdate, 0),
+		downloader:    downloader,
+		subscribers:   make([]chan ProgressUpdate, 0),
+		cancellations: make(map[string]context.CancelFunc),
 	}
 }
 
 // StartDownload starts a new video download in a goroutine and returns a unique identifier.
 func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadRequest) (string, error) {
 	u := uuid.New()
+	uStr := u.String()
+
+	bgCtx, cancel := context.WithCancel(context.Background())
+
+	m.mux.Lock()
+	m.cancellations[uStr] = cancel
+	m.mux.Unlock()
 
 	go func() {
-		// Use Background context because the request context (ctx) will be canceled
-		// as soon as the HTTP handler returns.
-		bgCtx := context.Background()
+		defer func() {
+			m.mux.Lock()
+			delete(m.cancellations, uStr)
+			m.mux.Unlock()
+			cancel()
+		}()
 
 		m.broadcast(ProgressUpdate{
-			UUID:    u.String(),
+			UUID:    uStr,
 			VideoID: req.VideoID,
 			Title:   req.Title,
 			Status:  "downloading",
 		})
 
 		err := m.downloader.Download(bgCtx, req, func(p ProgressUpdate) {
-			p.UUID = u.String()
+			p.UUID = uStr
 			p.VideoID = req.VideoID
 			p.Title = req.Title
 			p.Status = "downloading"
@@ -48,7 +60,7 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 
 		if err != nil {
 			m.broadcast(ProgressUpdate{
-				UUID:         u.String(),
+				UUID:         uStr,
 				VideoID:      req.VideoID,
 				Title:        req.Title,
 				Status:       "error",
@@ -56,16 +68,27 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 			})
 		} else {
 			m.broadcast(ProgressUpdate{
-				UUID:    u.String(),
+				UUID:    uStr,
 				VideoID: req.VideoID,
 				Title:   req.Title,
 				Status:  "finished",
+				Percent: "100%",
 			})
 		}
 	}()
 
+	return uStr, nil
+}
 
-	return u.String(), nil
+// CancelDownload cancels an active download by its UUID.
+func (m *DownloadManager) CancelDownload(uuid string) bool {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+	if cancel, ok := m.cancellations[uuid]; ok {
+		cancel()
+		return true
+	}
+	return false
 }
 
 // Subscribe returns a channel that receives progress updates for all active downloads.
@@ -98,6 +121,9 @@ func (m *DownloadManager) broadcast(p ProgressUpdate) {
 		select {
 		case sub <- p:
 		default:
+			// Dropping progress updates when the subscriber's channel buffer is full
+			// is an intentional design decision to prevent slow or blocked SSE clients
+			// from blocking the main download goroutine.
 		}
 	}
 }
