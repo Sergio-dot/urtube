@@ -95,26 +95,19 @@ func TestNewRouter_Routes(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/events", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
-		w := httptest.NewRecorder()
-		
-		ctx, cancel := context.WithCancel(context.Background())
-		req = req.WithContext(ctx)
-		
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			r.ServeHTTP(w, req)
-		}()
-		
-		// Wait deterministically for headers to be written
-		assert.Eventually(t, func() bool {
-			return w.Header().Get("Content-Type") != ""
-		}, 1*time.Second, 5*time.Millisecond)
-		cancel()
-		wg.Wait()
-
-		assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
-	})
+        req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+        // Create cancellable context
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        req = req.WithContext(ctx)
+        // Cancel after a short delay to simulate client disconnect
+        go func() {
+            time.Sleep(10 * time.Millisecond)
+            cancel()
+        }()
+        w := httptest.NewRecorder()
+        r.ServeHTTP(w, req)
+        // After request finishes, the Content-Type header should be set
+        assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+    })
 }
