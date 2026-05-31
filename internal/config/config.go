@@ -28,17 +28,18 @@ type Config struct {
 
 // Load reads the configuration from environment variables.
 func Load() (*Config, error) {
-	viper.SetDefault("SERVER_HOST", "localhost")
-	viper.SetDefault("SERVER_PORT", "8080")
-	viper.SetDefault("DOWNLOAD_DIR", "./downloads")
-	viper.SetDefault("LOG_LEVEL", "info")
-	viper.SetDefault("JSON", false)
-	viper.SetDefault("CONCISE", true)
-	viper.SetDefault("REQUEST_HEADERS", true)
+	v := viper.New()
+	v.SetDefault("SERVER_HOST", "localhost")
+	v.SetDefault("SERVER_PORT", "8080")
+	v.SetDefault("DOWNLOAD_DIR", "./downloads")
+	v.SetDefault("LOG_LEVEL", "info")
+	v.SetDefault("JSON", false)
+	v.SetDefault("CONCISE", true)
+	v.SetDefault("REQUEST_HEADERS", true)
 
-	viper.SetConfigFile(".env")
-	viper.AutomaticEnv()
-	err := viper.ReadInConfig()
+	v.SetConfigFile(".env")
+	v.AutomaticEnv()
+	err := v.ReadInConfig()
 	if err != nil {
 		if errors.As(err, &viper.ConfigFileNotFoundError{}) || errors.Is(err, os.ErrNotExist) {
 			slog.Info("no .env file found, using environment variables")
@@ -47,18 +48,23 @@ func Load() (*Config, error) {
 		}
 	}
 
-	return NewConfig(), nil
+	return NewConfigWithViper(v), nil
 }
 
-// NewConfig creates and returns a new Config.
+// NewConfig creates and returns a new Config using the global viper instance.
 func NewConfig() *Config {
+	return NewConfigWithViper(viper.GetViper())
+}
+
+// NewConfigWithViper creates and returns a new Config using the provided viper instance.
+func NewConfigWithViper(v *viper.Viper) *Config {
 	return &Config{
-		ServerHost:     viper.GetString("SERVER_HOST"),
-		ServerPort:     viper.GetString("SERVER_PORT"),
-		DownloadDir:    viper.GetString("DOWNLOAD_DIR"),
-		LogLevel:       viper.GetString("LOG_LEVEL"),
-		JSON:           viper.GetBool("JSON"),
-		Concise:        viper.GetBool("CONCISE"),
-		RequestHeaders: viper.GetBool("REQUEST_HEADERS"),
+		ServerHost:     v.GetString("SERVER_HOST"),
+		ServerPort:     v.GetString("SERVER_PORT"),
+		DownloadDir:    v.GetString("DOWNLOAD_DIR"),
+		LogLevel:       v.GetString("LOG_LEVEL"),
+		JSON:           v.GetBool("JSON"),
+		Concise:        v.GetBool("CONCISE"),
+		RequestHeaders: v.GetBool("REQUEST_HEADERS"),
 	}
 }

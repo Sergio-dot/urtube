@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -8,10 +9,16 @@ import (
 	"github.com/Sergio-dot/urtube/pkg/httputils"
 )
 
+// DownloadManager defines the interface needed for starting and cancelling downloads.
+type DownloadManager interface {
+	StartDownload(ctx context.Context, req *download.DownloadRequest) (string, error)
+	CancelDownload(uuid string) bool
+}
+
 // DownloadHandler is the handler for the download video request.
 type DownloadHandler struct {
 	// Manager is the download manager used to start downloads.
-	Manager *download.DownloadManager
+	Manager DownloadManager
 }
 
 // DownloadMedia handles the download media request.

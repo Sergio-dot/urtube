@@ -62,6 +62,15 @@ func TestNewRouter_Routes(t *testing.T) {
 		},
 	})
 
+	t.Run("GET /healthz", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	})
+
 	t.Run("GET /api/v1/search/{searchParam}", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/search/test", nil)
 		w := httptest.NewRecorder()
@@ -87,22 +96,17 @@ func TestNewRouter_Routes(t *testing.T) {
 
 	t.Run("GET /api/v1/events", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
-		w := httptest.NewRecorder()
-		
+
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		req = req.WithContext(ctx)
-		
-		wg := sync.WaitGroup{}
-		wg.Add(1)
+
 		go func() {
-			defer wg.Done()
-			r.ServeHTTP(w, req)
+			time.Sleep(10 * time.Millisecond)
+			cancel()
 		}()
-		
-		// Wait long enough for headers to be written
-		time.Sleep(100 * time.Millisecond)
-		cancel()
-		wg.Wait()
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
 
 		assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 	})

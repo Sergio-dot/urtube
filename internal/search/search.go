@@ -15,7 +15,10 @@ type Searcher interface {
 }
 
 // YtdlpSearcher is a searcher that uses ytdlp.
-type YtdlpSearcher struct{}
+type YtdlpSearcher struct {
+	// Executable is the name or path of the yt-dlp executable. Defaults to "yt-dlp".
+	Executable string
+}
 
 var (
 	ErrSearchFailed  = errors.New("failed to run search")
@@ -29,8 +32,13 @@ func (s *YtdlpSearcher) Search(ctx context.Context, param string, limit int, wan
 		limit = 5
 	}
 
+	exe := s.Executable
+	if exe == "" {
+		exe = "yt-dlp"
+	}
+
 	cmd := ytdlp.New().
-		SetExecutable("yt-dlp").
+		SetExecutable(exe).
 		NoUpdate().
 		PrintJSON().
 		IgnoreErrors().

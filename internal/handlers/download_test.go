@@ -34,17 +34,19 @@ func TestDownloadMedia(t *testing.T) {
 		body := download.DownloadRequest{
 			URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 		}
-		jsonBody, _ := json.Marshal(body)
+		jsonBody, err := json.Marshal(body)
+		assert.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
-		err := h.DownloadMedia(w, req)
+		err = h.DownloadMedia(w, req)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusAccepted, w.Code)
 		
 		var resp map[string]string
-		json.Unmarshal(w.Body.Bytes(), &resp)
+		err = json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.NoError(t, err)
 		assert.NotEmpty(t, resp["uuid"])
 		assert.Equal(t, "download started", resp["message"])
 	})
@@ -67,11 +69,12 @@ func TestDownloadMedia(t *testing.T) {
 		h := &DownloadHandler{Manager: nil}
 
 		body := download.DownloadRequest{URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
-		jsonBody, _ := json.Marshal(body)
+		jsonBody, err := json.Marshal(body)
+		assert.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
-		err := h.DownloadMedia(w, req)
+		err = h.DownloadMedia(w, req)
 
 		assert.Error(t, err)
 		apiErr, ok := err.(httputils.APIError)

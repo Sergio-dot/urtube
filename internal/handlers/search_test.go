@@ -44,7 +44,7 @@ func TestSearchMediaSuccess(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "Test Video")
 }
 
-func TestSearchMediaEmpty(t *testing.T) {
+func TestSearchMediaMissingParam(t *testing.T) {
 	mock := &mockSearcher{
 		MockSearch: func(ctx context.Context, param string, limit int, wantLiveStreams bool) ([]*ytdlp.ExtractedInfo, error) {
 			return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil

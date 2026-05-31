@@ -1,12 +1,13 @@
 package router
 
 import (
+	"bytes"
+	"context"
 	"embed"
 	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/Sergio-dot/urtube/internal/config"
@@ -19,12 +20,20 @@ import (
 	"github.com/go-chi/httplog/v2"
 )
 
+// DownloadManager defines the interface for the download manager.
+type DownloadManager interface {
+	StartDownload(ctx context.Context, req *download.DownloadRequest) (string, error)
+	CancelDownload(uuid string) bool
+	Subscribe() chan download.ProgressUpdate
+	Unsubscribe(ch chan download.ProgressUpdate)
+}
+
 // Dependencies holds the application dependencies.
 type Dependencies struct {
 	// Searcher is the searcher used to find videos.
 	Searcher search.Searcher
 	// Manager is the download manager used to start downloads and subscribe to updates.
-	Manager *download.DownloadManager
+	Manager DownloadManager
 	// Config is the application configuration.
 	Config config.Config
 	// UI is the filesystem containing the UI assets.
@@ -73,13 +82,17 @@ func serveUI(uiFS embed.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(dist))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
+		path := r.URL.Path
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
+		}
 		if path == "" {
 			path = "index.html"
 		}
 
-		_, err := fs.Stat(dist, path)
+		f, err := dist.Open(path)
 		if err == nil {
+			f.Close()
 			fileServer.ServeHTTP(w, r)
 			return
 		}
@@ -90,7 +103,18 @@ func serveUI(uiFS embed.FS) http.Handler {
 			return
 		}
 		defer index.Close()
-		http.ServeContent(w, r, "index.html", time.Now(), index.(io.ReadSeeker))
+
+		seeker, ok := index.(io.ReadSeeker)
+		if !ok {
+			data, err := io.ReadAll(index)
+			if err != nil {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			seeker = bytes.NewReader(data)
+		}
+
+		http.ServeContent(w, r, "index.html", time.Now(), seeker)
 	})
 }
 
