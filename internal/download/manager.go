@@ -2,7 +2,6 @@ package download
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -66,13 +65,12 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 			m.broadcast(p)
 		})
 
-		if errors.Is(err, context.Canceled) {
+		if bgCtx.Err() != nil {
 			m.broadcast(ProgressUpdate{
-				UUID:         uStr,
-				VideoID:      req.VideoID,
-				Title:        req.Title,
-				Status:       statusCancelled,
-				ErrorMessage: err.Error(),
+				UUID:    uStr,
+				VideoID: req.VideoID,
+				Title:   req.Title,
+				Status:  statusCancelled,
 			})
 		} else if err != nil {
 			m.broadcast(ProgressUpdate{

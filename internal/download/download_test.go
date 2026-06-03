@@ -228,17 +228,15 @@ func TestDownloadManager_CancelDownload(t *testing.T) {
 		ok := manager.CancelDownload(uuid)
 		assert.True(t, ok)
 
-		// We expect the status to be "cancelled" with context.Canceled error message
+		// We expect the status to be "cancelled" with no error message
 		timeout := time.After(1 * time.Second)
 		var lastStatus string
-		var errMsg string
 
 	loop:
 		for {
 			select {
 			case p := <-ch:
 				lastStatus = p.Status
-				errMsg = p.ErrorMessage
 				if p.Status == statusCancelled {
 					break loop
 				}
@@ -248,7 +246,6 @@ func TestDownloadManager_CancelDownload(t *testing.T) {
 		}
 
 		assert.Equal(t, statusCancelled, lastStatus)
-		assert.Contains(t, errMsg, "context canceled")
 	})
 
 	t.Run("returns false for unknown uuid", func(t *testing.T) {
