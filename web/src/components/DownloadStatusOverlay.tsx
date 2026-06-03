@@ -19,7 +19,7 @@ export default function DownloadStatusOverlay({
 }: DownloadStatusOverlayProps) {
   const [isMinimized, setIsMinimized] = useState(true);
 
-  //if (downloads.length === 0) return null;
+  if (downloads.length === 0) return null;
 
   const activeCount = downloads.filter(
     (d) => d.status === "downloading" || d.status === "loading",
