@@ -212,6 +212,21 @@ function App() {
     });
   };
 
+  const cancelDownload = async (id: string) => {
+    // Optimistically mark as cancelled in local state so the entry stays
+    // visible (showing "Cancelled") rather than disappearing and then
+    // reappearing when the SSE confirmation arrives.
+    setDownloadStates((prev) => {
+      if (!prev[id]) return prev;
+      return { ...prev, [id]: { ...prev[id], status: "cancelled" } };
+    });
+    try {
+      await fetch(`/api/v1/download/${id}`, { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to cancel download: ", err);
+    }
+  };
+
   const downloadsArray = Object.values(downloadStates).reverse();
 
   // Map videoId to status for SearchResults UI (green checkmark, etc.)
@@ -219,12 +234,14 @@ function App() {
     (acc, dl) => {
       if (dl.videoId) {
         const current = acc[dl.videoId];
-        // Priority: finished > downloading > loading > error
+        // Priority: finished > downloading > loading > error > cancelled
         if (current?.status === "finished" || current?.status === "success")
           return acc;
         if (
           current?.status === "downloading" &&
-          (dl.status === "loading" || dl.status === "error")
+          (dl.status === "loading" ||
+            dl.status === "error" ||
+            dl.status === "cancelled")
         )
           return acc;
 
@@ -295,6 +312,7 @@ function App() {
       <DownloadStatusOverlay
         downloads={downloadsArray}
         onRemove={removeDownload}
+        onCancel={cancelDownload}
       />
 
       <ErrorModal
