@@ -11,19 +11,23 @@ import type { DownloadState } from "../types";
 interface DownloadStatusOverlayProps {
   downloads: DownloadState[];
   onRemove: (uuid: string) => void;
+  onCancel: (uuid: string) => void;
+}
+
+function isActive(status: DownloadState["status"]) {
+  return status == "downloading" || status == "loading";
 }
 
 export default function DownloadStatusOverlay({
   downloads,
   onRemove,
+  onCancel,
 }: DownloadStatusOverlayProps) {
   const [isMinimized, setIsMinimized] = useState(true);
 
-  //if (downloads.length === 0) return null;
+  if (downloads.length === 0) return null;
 
-  const activeCount = downloads.filter(
-    (d) => d.status === "downloading" || d.status === "loading",
-  ).length;
+  const activeCount = downloads.filter((d) => isActive(d.status)).length;
 
   const truncateSeconds = (durationStr: string | undefined) => {
     return (durationStr || "--").replace(/(\d+)\.(\d+)s$/, "$1s");
@@ -68,12 +72,19 @@ export default function DownloadStatusOverlay({
                       ? "Completed"
                       : dl.status === "error"
                         ? dl.errorMessage
-                        : dl.speed || "Starting..."}
+                        : dl.status === "cancelled"
+                          ? "Cancelled"
+                          : dl.speed || "Starting..."}
                   </p>
                 </div>
                 <button
-                  onClick={() => onRemove(dl.uuid)}
+                  onClick={() =>
+                    isActive(dl.status) ? onCancel(dl.uuid) : onRemove(dl.uuid)
+                  }
                   className="rounded-md p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10"
+                  aria-label={
+                    isActive(dl.status) ? "Cancel download" : "Dismiss"
+                  }
                 >
                   <XMarkIcon className="h-4 w-4" />
                 </button>
@@ -85,15 +96,19 @@ export default function DownloadStatusOverlay({
                   <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-800">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        dl.status === "finished"
+                        dl.status === "finished" || dl.status === "success"
                           ? "bg-green-500"
                           : dl.status === "error"
                             ? "bg-red-500"
-                            : "bg-indigo-500"
+                            : dl.status === "cancelled"
+                              ? "bg-gray-400"
+                              : "bg-indigo-500"
                       }`}
                       style={{
                         width:
-                          dl.status === "finished"
+                          dl.status === "finished" ||
+                          dl.status === "success" ||
+                          dl.status === "cancelled"
                             ? "100%"
                             : dl.percent || "0%",
                       }}

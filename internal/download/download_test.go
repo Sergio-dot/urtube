@@ -201,51 +201,92 @@ func TestFormatBytes(t *testing.T) {
 }
 
 func TestDownloadManager_CancelDownload(t *testing.T) {
-	mock := &mockDownloader{
-		DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(2 * time.Second):
-				return nil
-			}
-		},
-	}
-
-	manager := NewDownloadManager(mock)
-	ch := manager.Subscribe()
-	defer manager.Unsubscribe(ch)
-
-	uuid, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
-	assert.NoError(t, err)
-	assert.NotEmpty(t, uuid)
-
-	// Wait a moment for goroutine to start
-	time.Sleep(10 * time.Millisecond)
-
-	// Cancel it
-	ok := manager.CancelDownload(uuid)
-	assert.True(t, ok)
-
-	// We expect the status to end up as "error" with context.Canceled error message
-	timeout := time.After(1 * time.Second)
-	var lastStatus string
-	var errMsg string
-
-loop:
-	for {
-		select {
-		case p := <-ch:
-			lastStatus = p.Status
-			errMsg = p.ErrorMessage
-			if p.Status == "error" {
-				break loop
-			}
-		case <-timeout:
-			t.Fatal("timed out waiting for cancelled status")
+	t.Run("cancels active download and broadcasts cancelled status", func(t *testing.T) {
+		mock := &mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(2 * time.Second):
+					return nil
+				}
+			},
 		}
-	}
 
-	assert.Equal(t, "error", lastStatus)
-	assert.Contains(t, errMsg, "context canceled")
+		manager := NewDownloadManager(mock)
+		ch := manager.Subscribe()
+		defer manager.Unsubscribe(ch)
+
+		uuid, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+		assert.NotEmpty(t, uuid)
+
+		// Wait a moment for goroutine to start
+		time.Sleep(10 * time.Millisecond)
+
+		// Cancel it
+		ok := manager.CancelDownload(uuid)
+		assert.True(t, ok)
+
+		// We expect the status to be "cancelled" with no error message
+		timeout := time.After(1 * time.Second)
+		var lastStatus string
+
+	loop:
+		for {
+			select {
+			case p := <-ch:
+				lastStatus = p.Status
+				if p.Status == statusCancelled {
+					break loop
+				}
+			case <-timeout:
+				t.Fatal("timed out waiting for cancelled status")
+			}
+		}
+
+		assert.Equal(t, statusCancelled, lastStatus)
+	})
+
+	t.Run("returns false for unknown uuid", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{})
+		ok := manager.CancelDownload("non-existent-uuid")
+		assert.False(t, ok)
+	})
+
+	t.Run("returns false after download already finished", func(t *testing.T) {
+		doneCh := make(chan struct{})
+		mock := &mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				close(doneCh)
+				return nil
+			},
+		}
+
+		manager := NewDownloadManager(mock)
+		ch := manager.Subscribe()
+		defer manager.Unsubscribe(ch)
+
+		uuid, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+
+		// Wait for the download goroutine to finish and clean up the cancellation entry
+		<-doneCh
+		// Drain channel to ensure the goroutine's deferred cleanup has run
+		var finished bool
+		timeout := time.After(1 * time.Second)
+		for !finished {
+			select {
+			case p := <-ch:
+				if p.Status == statusFinished {
+					finished = true
+				}
+			case <-timeout:
+				t.Fatal("timed out waiting for finished status")
+			}
+		}
+
+		ok := manager.CancelDownload(uuid)
+		assert.False(t, ok)
+	})
 }

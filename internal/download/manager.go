@@ -24,6 +24,13 @@ func NewDownloadManager(downloader Downloader) *DownloadManager {
 	}
 }
 
+const (
+	statusDownloading = "downloading"
+	statusCancelled   = "cancelled"
+	statusError       = "error"
+	statusFinished    = "finished"
+)
+
 // StartDownload starts a new video download in a goroutine and returns a unique identifier.
 func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadRequest) (string, error) {
 	u := uuid.New()
@@ -47,23 +54,30 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 			UUID:    uStr,
 			VideoID: req.VideoID,
 			Title:   req.Title,
-			Status:  "downloading",
+			Status:  statusDownloading,
 		})
 
 		err := m.downloader.Download(bgCtx, req, func(p ProgressUpdate) {
 			p.UUID = uStr
 			p.VideoID = req.VideoID
 			p.Title = req.Title
-			p.Status = "downloading"
+			p.Status = statusDownloading
 			m.broadcast(p)
 		})
 
-		if err != nil {
+		if bgCtx.Err() != nil {
+			m.broadcast(ProgressUpdate{
+				UUID:    uStr,
+				VideoID: req.VideoID,
+				Title:   req.Title,
+				Status:  statusCancelled,
+			})
+		} else if err != nil {
 			m.broadcast(ProgressUpdate{
 				UUID:         uStr,
 				VideoID:      req.VideoID,
 				Title:        req.Title,
-				Status:       "error",
+				Status:       statusError,
 				ErrorMessage: err.Error(),
 			})
 		} else {
@@ -71,7 +85,7 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 				UUID:    uStr,
 				VideoID: req.VideoID,
 				Title:   req.Title,
-				Status:  "finished",
+				Status:  statusFinished,
 				Percent: "100%",
 			})
 		}
@@ -83,8 +97,9 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 // CancelDownload cancels an active download by its UUID.
 func (m *DownloadManager) CancelDownload(uuid string) bool {
 	m.mux.Lock()
-	defer m.mux.Unlock()
-	if cancel, ok := m.cancellations[uuid]; ok {
+	cancel, ok := m.cancellations[uuid]
+	m.mux.Unlock()
+	if ok {
 		cancel()
 		return true
 	}

@@ -26,7 +26,8 @@ export type DownloadStatus =
   | "success"
   | "error"
   | "downloading"
-  | "finished";
+  | "finished"
+  | "cancelled";
 
 export interface DownloadOptions {
   type: DownloadType;
@@ -48,7 +49,7 @@ export interface ProgressUpdate {
   uuid: string;
   videoId: string;
   title: string;
-  status: "downloading" | "finished" | "error";
+  status: "downloading" | "finished" | "error" | "cancelled";
   errorMessage?: string;
   percent: string;
   speed: string;
