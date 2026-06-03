@@ -130,6 +130,7 @@ func routerV1(deps Dependencies) http.Handler {
 
 		r.Get("/search/{searchParam}", httputils.MakeHandler((&handlers.SearchHandler{Searcher: deps.Searcher}).SearchMedia))
 		r.Post("/download", httputils.MakeHandler((&handlers.DownloadHandler{Manager: deps.Manager}).DownloadMedia))
+		r.Delete("/download/{uuid}", httputils.MakeHandler((&handlers.DownloadHandler{Manager: deps.Manager}).CancelDownload))
 	})
 
 	return v1

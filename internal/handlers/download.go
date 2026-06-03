@@ -7,6 +7,7 @@ import (
 
 	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/pkg/httputils"
+	"github.com/go-chi/chi/v5"
 )
 
 // DownloadManager defines the interface needed for starting and cancelling downloads.
@@ -44,6 +45,28 @@ func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) 
 	httputils.WriteJSON(w, http.StatusAccepted, map[string]string{
 		"uuid":    downloadUUID,
 		"message": "download started",
+	})
+
+	return nil
+}
+
+func (h *DownloadHandler) CancelDownload(w http.ResponseWriter, r *http.Request) error {
+	if h.Manager == nil {
+		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "download manager not available"}
+	}
+
+	uuid := chi.URLParam(r, "uuid")
+	if uuid == "" {
+		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "uuid is required"}
+	}
+
+	if !h.Manager.CancelDownload(uuid) {
+		return httputils.APIError{StatusCode: http.StatusNotFound, Message: "no active download found for uuid: " + uuid}
+	}
+
+	httputils.WriteJSON(w, http.StatusOK, map[string]string{
+		"uuid":    uuid,
+		"message": "download cancelled",
 	})
 
 	return nil
