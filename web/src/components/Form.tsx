@@ -7,47 +7,41 @@ import {
 } from "@headlessui/react";
 import { MagnifyingGlassIcon, CheckIcon } from "@heroicons/react/20/solid";
 import { ChevronUpDownIcon } from "@heroicons/react/16/solid";
-import type { Video, SelectOption } from "../types";
+import type { Health, SearchParams } from "../api";
 
 interface FormProps {
-  onResults: (results: Video[]) => void;
-  onLoading: (loading: boolean) => void;
+  onSearch: (params: SearchParams) => void;
+  /** The server's health, or null while unknown. */
+  health: Health | null;
 }
 
-const limitOptions: SelectOption[] = [
-  { id: 1, label: "5 results", value: 5 },
-  { id: 2, label: "10 results", value: 10 },
-  { id: 3, label: "15 results", value: 15 },
-  { id: 4, label: "20 results", value: 20 },
-  { id: 5, label: "50 results", value: 50 },
-];
+interface LimitOption {
+  label: string;
+  value: number;
+}
 
-export default function Form({ onResults, onLoading }: FormProps) {
+const limitOptions: LimitOption[] = [5, 10, 15, 20, 50].map((value) => ({
+  label: `${value} results`,
+  value,
+}));
+
+export default function Form({ onSearch, health }: FormProps) {
   const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState<SelectOption>(limitOptions[0]);
-  const [wantLiveStreams, setWantLiveStreams] = useState(false);
+  const [limit, setLimit] = useState(limitOptions[0]);
+  const [includeLive, setIncludeLive] = useState(false);
 
-  const handleSubmit = async (e: React.SubmitEvent) => {
+  const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-
-    onLoading(true);
-    try {
-      const response = await fetch(
-        `/api/v1/search/${encodeURIComponent(query)}?limit=${limit.value}&wantLiveStreams=${wantLiveStreams}`,
-      );
-      if (!response.ok) {
-        throw new Error("Search failed");
-      }
-      const data = await response.json();
-      onResults(data);
-    } catch (error) {
-      console.error("Error during search:", error);
-      onResults([]);
-    } finally {
-      onLoading(false);
-    }
+    const trimmed = query.trim();
+    if (trimmed) onSearch({ query: trimmed, limit: limit.value, includeLive });
   };
+
+  const [statusColor, statusText] =
+    health === null
+      ? ["bg-gray-400", "Connecting…"]
+      : health.dependencies.ytdlp
+        ? ["bg-green-500", "Ready to download"]
+        : ["bg-red-500", "yt-dlp unavailable on the server"];
 
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4 sm:px-6 lg:px-8">
@@ -97,12 +91,11 @@ export default function Form({ onResults, onLoading }: FormProps) {
             <label className="flex cursor-pointer items-center gap-x-3 select-none">
               <div className="group grid size-4 grid-cols-1 shrink-0">
                 <input
-                  id="wantLiveStreams"
-                  name="wantLiveStreams"
+                  id="includeLive"
+                  name="includeLive"
                   type="checkbox"
-                  checked={wantLiveStreams}
-                  onChange={(e) => setWantLiveStreams(e.target.checked)}
-                  aria-describedby="wantLiveStreams-description"
+                  checked={includeLive}
+                  onChange={(e) => setIncludeLive(e.target.checked)}
                   className="col-start-1 row-start-1 appearance-none rounded-sm border border-gray-300 bg-white checked:border-indigo-500 checked:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/10 dark:bg-white/5 dark:checked:border-indigo-500 dark:checked:bg-indigo-500"
                 />
                 <svg
@@ -135,8 +128,8 @@ export default function Form({ onResults, onLoading }: FormProps) {
 
         <div className="mt-10 flex items-center justify-center gap-x-6">
           <div className="flex items-center gap-x-2 text-sm text-gray-500 dark:text-gray-400 select-none">
-            <span className="flex h-2 w-2 rounded-full bg-green-500"></span>
-            Ready to download
+            <span className={`flex h-2 w-2 rounded-full ${statusColor}`}></span>
+            {statusText}
           </div>
           <div className="h-4 w-px bg-gray-200 dark:bg-white/10"></div>
           <p className="text-sm text-gray-500 dark:text-gray-400 select-none">
@@ -152,9 +145,9 @@ export default function Form({ onResults, onLoading }: FormProps) {
 }
 
 interface SelectMenuProps {
-  options: SelectOption[];
-  selected: SelectOption;
-  onChange: (option: SelectOption) => void;
+  options: LimitOption[];
+  selected: LimitOption;
+  onChange: (option: LimitOption) => void;
 }
 
 function SelectMenu({ options, selected, onChange }: SelectMenuProps) {
@@ -177,7 +170,7 @@ function SelectMenu({ options, selected, onChange }: SelectMenuProps) {
         >
           {options.map((option) => (
             <ListboxOption
-              key={option.id}
+              key={option.value}
               value={option}
               className="group relative cursor-default py-2 pr-9 pl-3 text-gray-900 dark:text-white select-none data-focus:bg-indigo-500 data-focus:outline-hidden"
             >

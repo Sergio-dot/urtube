@@ -2,12 +2,13 @@ package httpapi
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Sergio-dot/urtube/internal/media"
 )
 
 // The types in this file define the JSON contract with the frontend
-// (web/src/types.ts). Keep the two in sync.
+// (web/src/api.ts). Keep the two in sync.
 
 type errorResponse struct {
 	Error string `json:"error"`
@@ -104,8 +105,9 @@ func newDownloadEvent(d media.Download) downloadEvent {
 	if p.BytesPerSecond > 0 {
 		e.Speed = formatBytes(int64(p.BytesPerSecond)) + "/s"
 	}
-	if p.ETA > 0 {
-		e.ETA = p.ETA.String()
+	// yt-dlp estimates fractional seconds; "1m5s" reads better than "1m5.4s".
+	if eta := p.ETA.Round(time.Second); eta > 0 {
+		e.ETA = eta.String()
 	}
 	if p.DownloadedBytes > 0 {
 		e.Downloaded = formatBytes(p.DownloadedBytes)

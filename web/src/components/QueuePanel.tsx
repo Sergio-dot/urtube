@@ -1,5 +1,5 @@
 import { XMarkIcon, TrashIcon } from "@heroicons/react/24/outline";
-import type { Video } from "../types";
+import type { Video } from "../api";
 
 interface QueuePanelProps {
   isOpen: boolean;
@@ -40,7 +40,9 @@ export default function QueuePanel({
               Queue ({videos.length})
             </h2>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close queue"
               className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white"
             >
               <XMarkIcon className="h-6 w-6" />
@@ -69,7 +71,9 @@ export default function QueuePanel({
                       </p>
                     </div>
                     <button
+                      type="button"
                       onClick={() => onRemoveVideo(video.id)}
+                      aria-label={`Remove ${video.title} from queue`}
                       className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
                     >
                       <TrashIcon className="h-4 w-4" />

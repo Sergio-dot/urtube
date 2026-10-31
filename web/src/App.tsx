@@ -1,4 +1,4 @@
-import "./App.css";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Navbar from "./components/Navbar";
 import Form from "./components/Form";
 import SearchResults from "./components/SearchResults";
@@ -7,274 +7,151 @@ import Footer from "./components/Footer";
 import QueuePanel from "./components/QueuePanel";
 import DownloadModal from "./components/DownloadModal";
 import DownloadStatusOverlay from "./components/DownloadStatusOverlay";
-import { useEffect, useState, useCallback } from "react";
-import type {
-  Video,
-  DownloadState,
-  DownloadOptions,
-  ProgressUpdate,
-  DownloadStatus,
-} from "./types";
-import { useDownloadEvents } from "./hooks/useDownloadEvents";
+import Spinner from "./components/Spinner";
+import { isValidOptions, type DownloadOptions, type Video } from "./api";
+import { downloadsByVideo } from "./downloads";
+import { useDownloads } from "./hooks/useDownloads";
+import { useHealth } from "./hooks/useHealth";
+import { useLocalStorage } from "./hooks/useLocalStorage";
+import { useQueue } from "./hooks/useQueue";
+import { useSearch } from "./hooks/useSearch";
 
-const PREFERENCES_KEY = "urtube_download_preferences";
-const QUEUE_KEY = "urtube_video_queue";
+const DEFAULT_OPTIONS: DownloadOptions = { type: "video", format: "mp4" };
+
+interface ErrorInfo {
+  title: string;
+  message: string;
+}
+
+/** Videos waiting for the user to pick download options. */
+interface PendingDownload {
+  videos: Video[];
+  /** Whether they come from the queue, which is cleared once they start. */
+  fromQueue: boolean;
+}
 
 function App() {
+  const health = useHealth();
+  const search = useSearch();
+  const queue = useQueue();
+  const { downloads, start, cancel, dismiss } = useDownloads();
+  const [preferences, setPreferences] = useLocalStorage(
+    "urtube_download_preferences",
+    DEFAULT_OPTIONS,
+    isValidOptions,
+  );
+
+  // Kept after closing so the modal's text doesn't vanish as it fades out.
+  const [error, setError] = useState<ErrorInfo>({ title: "", message: "" });
   const [showError, setShowError] = useState(false);
-  const [errorTitle, setErrorTitle] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [results, setResults] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null);
-
-  const [queue, setQueue] = useState<Video[]>(() => {
-    const saved = localStorage.getItem(QUEUE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
   const [showPanel, setShowPanel] = useState(false);
-
-  // downloadStates is now keyed by download ID (UUID)
-  const [downloadStates, setDownloadStates] = useState<
-    Record<string, DownloadState>
-  >({});
-
+  const [pending, setPending] = useState<PendingDownload | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Remounts the modal for each request so it starts from the preferences.
   const [modalKey, setModalKey] = useState(0);
-  const [videoToDownload, setVideoToDownload] = useState<
-    Video | Video[] | null
-  >(null);
-  const [preferences, setPreferences] = useState<DownloadOptions>(() => {
-    const saved = localStorage.getItem(PREFERENCES_KEY);
-    return saved ? JSON.parse(saved) : { type: "video", format: "mp4" };
-  });
-
-  const handleProgressUpdate = useCallback((update: ProgressUpdate) => {
-    setDownloadStates((prev) => {
-      const existing = prev[update.uuid];
-      // Only update if we already have it OR if it's a new UUID we haven't seen.
-      // We merge with 'existing' to preserve the 'title' and 'videoId' added by performDownload.
-      return {
-        ...prev,
-        [update.uuid]: {
-          ...(existing || {}),
-          uuid: update.uuid,
-          videoId: update.videoId,
-          title: update.title,
-          status: update.status as DownloadStatus,
-          percent: update.percent,
-          speed: update.speed,
-          eta: update.eta,
-          downloaded: update.downloaded,
-          total: update.total,
-          errorMessage: update.errorMessage,
-        },
-      };
-    });
-  }, []);
-
-  useDownloadEvents(handleProgressUpdate);
 
   useEffect(() => {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  }, [queue]);
-
-  useEffect(() => {
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
-  }, [preferences]);
-
-  useEffect(() => {
+    // Enable theme transitions only after the first paint.
     const timer = setTimeout(() => {
       document.body.style.setProperty("--transition-speed", "500ms");
     }, 100);
-
-    // Check health
-    fetch("/api/v1/health")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "degraded" || !data.dependencies.ytdlp) {
-          setErrorTitle("Missing Dependency");
-          setErrorMessage(
-            "yt-dlp is not installed on the server. Please install it to use urtube: https://github.com/yt-dlp/yt-dlp",
-          );
-          setShowError(true);
-        } else {
-          setYtdlpVersion(data.dependencies.version);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to check health:", err);
-      });
-
     return () => clearTimeout(timer);
   }, []);
 
-  const addToQueue = (video: Video) => {
-    if (!queue.some((v) => v.id === video.id)) {
-      setQueue([...queue, video]);
-    }
-  };
-
-  const removeFromQueue = (videoId: string) => {
-    setQueue(queue.filter((v) => v.id !== videoId));
-  };
-
-  const clearQueue = () => {
-    setQueue([]);
-  };
-
-  const handleDownloadRequest = (video: Video | Video[]) => {
-    setVideoToDownload(video);
-    setModalKey((prev) => prev + 1);
+  const requestDownload = useCallback((videos: Video[], fromQueue: boolean) => {
+    setPending({ videos, fromQueue });
+    setModalKey((k) => k + 1);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const confirmDownload = (options: DownloadOptions) => {
+  const confirmDownload = async (options: DownloadOptions) => {
+    if (!pending) return;
     setPreferences(options);
-
-    if (Array.isArray(videoToDownload)) {
-      videoToDownload.forEach((v) => performDownload(v, options));
-    } else if (videoToDownload) {
-      performDownload(videoToDownload, options);
+    if (pending.fromQueue) {
+      queue.clear();
+      setShowPanel(false);
     }
 
-    clearQueue();
-    setShowPanel(false);
-  };
-
-  const performDownload = async (video: Video, options: DownloadOptions) => {
-    try {
-      const response = await fetch("/api/v1/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: video.url,
-          videoId: video.id,
-          title: video.title,
-          options,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to start download");
+    // One at a time, so the server queues them in the order shown.
+    const failures: string[] = [];
+    for (const video of pending.videos) {
+      try {
+        await start(video, options);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "unknown error";
+        failures.push(
+          pending.videos.length > 1 ? `${video.title}: ${reason}` : reason,
+        );
       }
-
-      const data = await response.json();
-      const downloadUUID = data.uuid;
-
-      setDownloadStates((prev) => {
-        const existing = prev[downloadUUID];
-        return {
-          ...prev,
-          [downloadUUID]: {
-            ...existing,
-            uuid: downloadUUID,
-            videoId: video.id,
-            title: video.title,
-            status: existing?.status || "loading",
-            options,
-          },
-        };
-      });
-    } catch (error) {
-      console.error("Download error:", error);
-      // For errors that happen before we get a download ID, we just show an error modal
-      setErrorTitle("Download Failed");
-      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+    }
+    if (failures.length > 0) {
+      setError({ title: "Download failed", message: failures.join("\n") });
       setShowError(true);
     }
   };
 
-  const removeDownload = (id: string) => {
-    setDownloadStates((prev) => {
-      const newState = { ...prev };
-      delete newState[id];
-      return newState;
-    });
-  };
-
-  const cancelDownload = async (id: string) => {
-    // Optimistically mark as cancelled in local state so the entry stays
-    // visible (showing "Cancelled") rather than disappearing and then
-    // reappearing when the SSE confirmation arrives.
-    setDownloadStates((prev) => {
-      if (!prev[id]) return prev;
-      return { ...prev, [id]: { ...prev[id], status: "cancelled" } };
-    });
-    try {
-      await fetch(`/api/v1/download/${id}`, { method: "DELETE" });
-    } catch (err) {
-      console.error("Failed to cancel download: ", err);
-    }
-  };
-
-  const downloadsArray = Object.values(downloadStates).reverse();
-
-  // Map videoId to status for SearchResults UI (green checkmark, etc.)
-  const videoStatusMap = Object.values(downloadStates).reduce(
-    (acc, dl) => {
-      if (dl.videoId) {
-        const current = acc[dl.videoId];
-        // Priority: finished > downloading/queued > loading > error > cancelled
-        if (current?.status === "finished" || current?.status === "success")
-          return acc;
-        if (
-          (current?.status === "downloading" ||
-            current?.status === "queued") &&
-          (dl.status === "loading" ||
-            dl.status === "error" ||
-            dl.status === "cancelled")
-        )
-          return acc;
-
-        acc[dl.videoId] = dl;
-      }
-      return acc;
-    },
-    {} as Record<string, DownloadState>,
+  const byVideo = useMemo(() => downloadsByVideo(downloads), [downloads]);
+  const newestFirst = useMemo(
+    () => Object.values(downloads).reverse(),
+    [downloads],
   );
+  const isQueued = (videoId: string) =>
+    queue.videos.some((v) => v.id === videoId);
+
+  const modalTitle = !pending
+    ? "Download"
+    : pending.videos.length === 1
+      ? `Download ${pending.videos[0].title}`
+      : `Download Queue (${pending.videos.length} items)`;
 
   return (
     <div className="min-h-screen flex flex-col">
       <div className="navbar">
         <Navbar
-          onTogglePanel={() => setShowPanel(!showPanel)}
-          queueSize={queue.length}
+          onTogglePanel={() => setShowPanel((open) => !open)}
+          queueSize={queue.videos.length}
         />
       </div>
 
       <main className="grow">
         <div className="form">
-          <Form onResults={setResults} onLoading={setLoading} />
+          <Form onSearch={search.search} health={health} />
         </div>
 
-        {loading && (
+        {search.loading ? (
           <div className="flex justify-center py-10">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            <Spinner className="size-12 text-indigo-500" />
           </div>
-        )}
-
-        <div className="results">
-          <SearchResults
-            results={results}
-            onAddVideo={addToQueue}
-            onRemoveVideo={removeFromQueue}
-            onDownloadVideo={handleDownloadRequest}
-            onCancelDownload={cancelDownload}
-            queue={queue}
-            downloadStates={videoStatusMap}
-          />
-        </div>
+        ) : search.error ? (
+          <p className="py-10 text-center text-sm text-red-500">
+            Search failed: {search.error}
+          </p>
+        ) : search.results?.length === 0 ? (
+          <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            No videos found.
+          </p>
+        ) : search.results ? (
+          <div className="results">
+            <SearchResults
+              results={search.results}
+              downloads={byVideo}
+              isQueued={isQueued}
+              onQueue={queue.add}
+              onUnqueue={queue.remove}
+              onDownload={(video) => requestDownload([video], false)}
+              onCancelDownload={cancel}
+            />
+          </div>
+        ) : null}
       </main>
 
       <QueuePanel
         isOpen={showPanel}
         onClose={() => setShowPanel(false)}
-        videos={queue}
-        onRemoveVideo={removeFromQueue}
-        onClearQueue={clearQueue}
-        onDownloadAll={() => handleDownloadRequest(queue)}
+        videos={queue.videos}
+        onRemoveVideo={queue.remove}
+        onClearQueue={queue.clear}
+        onDownloadAll={() => requestDownload(queue.videos, true)}
       />
 
       <DownloadModal
@@ -282,30 +159,24 @@ function App() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onConfirm={confirmDownload}
-        title={
-          videoToDownload
-            ? Array.isArray(videoToDownload)
-              ? `Download Queue (${videoToDownload.length} items)`
-              : `Download ${videoToDownload.title}`
-            : "Download Preferences"
-        }
+        title={modalTitle}
         initialOptions={preferences}
       />
 
       <DownloadStatusOverlay
-        downloads={downloadsArray}
-        onRemove={removeDownload}
-        onCancel={cancelDownload}
+        downloads={newestFirst}
+        onDismiss={dismiss}
+        onCancel={cancel}
       />
 
       <ErrorModal
         open={showError}
-        onClose={setShowError}
-        title={errorTitle}
-        message={errorMessage}
+        onClose={() => setShowError(false)}
+        title={error.title}
+        message={error.message}
       />
 
-      <Footer version={ytdlpVersion} />
+      <Footer version={health?.dependencies.version ?? null} />
     </div>
   );
 }

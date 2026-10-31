@@ -286,6 +286,14 @@ func TestNewDownloadEvent(t *testing.T) {
 		}, e)
 	})
 
+	t.Run("eta is rounded to whole seconds", func(t *testing.T) {
+		eta := func(d time.Duration) string {
+			return newDownloadEvent(media.Download{Progress: media.Progress{ETA: d}}).ETA
+		}
+		assert.Equal(t, "1m5s", eta(65400*time.Millisecond))
+		assert.Equal(t, "", eta(400*time.Millisecond), "under half a second is unknown, not 0s")
+	})
+
 	t.Run("unknown progress is empty", func(t *testing.T) {
 		e := newDownloadEvent(media.Download{ID: "id", Status: media.StatusQueued})
 		assert.Equal(t, downloadEvent{UUID: "id", Status: "queued"}, e)
