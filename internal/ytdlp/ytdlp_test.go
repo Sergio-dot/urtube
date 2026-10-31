@@ -163,6 +163,28 @@ exit 1`)
 
 func ptr[T any](v T) *T { return &v }
 
+func TestFetcher_RemoveStaleTempDirs(t *testing.T) {
+	t.Run("removes only per-download dirs", func(t *testing.T) {
+		tempDir := t.TempDir()
+		stale := filepath.Join(tempDir, "urtube-download-123")
+		assert.NoError(t, os.MkdirAll(filepath.Join(stale, "nested"), 0o755))
+		assert.NoError(t, os.WriteFile(filepath.Join(stale, "nested", "video.part"), []byte("x"), 0o644))
+		other := filepath.Join(tempDir, "keep-me")
+		assert.NoError(t, os.WriteFile(other, []byte("x"), 0o644))
+
+		f := &Fetcher{TempDir: tempDir}
+		assert.NoError(t, f.RemoveStaleTempDirs())
+
+		assert.NoDirExists(t, stale)
+		assert.FileExists(t, other)
+	})
+
+	t.Run("missing temp dir", func(t *testing.T) {
+		f := &Fetcher{TempDir: filepath.Join(t.TempDir(), "missing")}
+		assert.NoError(t, f.RemoveStaleTempDirs())
+	})
+}
+
 func TestToVideo(t *testing.T) {
 	t.Run("maps a regular video", func(t *testing.T) {
 		v, ok := toVideo(&ytdlp.ExtractedInfo{

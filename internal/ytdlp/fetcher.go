@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,10 @@ import (
 )
 
 const defaultExecutable = "yt-dlp"
+
+// tempDirPattern names the per-download directories created in TempDir. The
+// prefix is distinctive so RemoveStaleTempDirs only ever matches urtube's own.
+const tempDirPattern = "urtube-download-*"
 
 // progressPrefix marks the progress lines yt-dlp prints for --progress-template.
 const progressPrefix = "urtube-progress:"
@@ -45,7 +50,7 @@ type Fetcher struct {
 // written to a temporary directory, removed afterwards, and only finished
 // files are moved into DownloadDir.
 func (f *Fetcher) Fetch(ctx context.Context, req media.Request, onProgress func(media.Progress)) error {
-	tempDir, err := os.MkdirTemp(f.TempDir, "download-*")
+	tempDir, err := os.MkdirTemp(f.TempDir, tempDirPattern)
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
@@ -82,6 +87,25 @@ func (f *Fetcher) Fetch(ctx context.Context, req media.Request, onProgress func(
 		return fmt.Errorf("yt-dlp: %w", err)
 	}
 	return nil
+}
+
+// RemoveStaleTempDirs deletes per-download directories left in TempDir by a
+// previous run that was killed mid-download, such as a container stopped
+// after its grace period. Call it at startup, before any download starts.
+func (f *Fetcher) RemoveStaleTempDirs() error {
+	if f.TempDir == "" {
+		// The system temp dir is shared; never sweep it.
+		return nil
+	}
+	dirs, err := filepath.Glob(filepath.Join(f.TempDir, tempDirPattern))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, dir := range dirs {
+		errs = append(errs, os.RemoveAll(dir))
+	}
+	return errors.Join(errs...)
 }
 
 // newCommand returns a yt-dlp command that never updates itself and only

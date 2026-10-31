@@ -1,0 +1,33 @@
+# Usage: set LIBRARY_DIR (and PUID/PGID) in a .env file next to this one, then
+#   docker compose up -d --build
+services:
+  urtube:
+    build: .
+    image: urtube:local
+    container_name: urtube
+    restart: unless-stopped
+    # Run as the owner of the library so downloaded files belong to them
+    # (`id -u` / `id -g` of that user on the host).
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      URTUBE_MAX_CONCURRENT_DOWNLOADS: "2"
+      # Running downloads may finish for up to this long on shutdown; keep it
+      # below stop_grace_period so Docker doesn't kill urtube first.
+      URTUBE_SHUTDOWN_TIMEOUT: 60s
+      URTUBE_LOG_LEVEL: info
+    volumes:
+      # Finished downloads, e.g. a Jellyfin music library.
+      - ${LIBRARY_DIR:-./downloads}:/downloads
+      # In-progress downloads, kept on disk rather than in memory.
+      - work:/var/tmp
+    tmpfs:
+      - /tmp:mode=1777,size=512m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 70s
+
+volumes:
+  work:

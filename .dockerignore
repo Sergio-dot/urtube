@@ -1,0 +1,17 @@
+# Only what the build needs; everything else stays out of the build context.
+.git
+.github
+.agents
+.env
+*.md
+compose.yaml
+Dockerfile
+.dockerignore
+downloads
+tmp
+web/tmp
+web/node_modules
+web/dist
+**/*.test
+**/*.out
+coverage.*
