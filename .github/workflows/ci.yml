@@ -1,47 +1,153 @@
 name: CI
+
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-jobs:
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # Weekly: YouTube changes break yt-dlp and new CVEs appear even when the
+  # code doesn't change.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: "npm"
+          cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Build frontend
-        working-directory: web
-        run: |
-          npm ci
-          npm run lint
-          npm test
-          npm run build
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/upload-artifact@v7
         with:
-          go-version: "1.25"
+          name: ui-dist
+          path: internal/ui/dist
+          retention-days: 1
 
-      - name: Vet
-        run: go vet ./...
+  go:
+    name: Go
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
-      - name: Install dependencies
+      - uses: actions/download-artifact@v8
+        with:
+          name: ui-dist
+          path: internal/ui/dist
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install yt-dlp and ffmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python3 -m pip install -U yt-dlp
 
-      - name: Build
-        run: go build -v ./...
+      - run: go vet ./...
+      - run: go build ./...
+      # Includes TestIntegration, which downloads from YouTube with the latest
+      # yt-dlp.
+      - run: go test -race -v ./...
 
-      - name: Test
-        run: go test -race -v ./...
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # internal/ui embeds the built frontend; an empty one is enough to
+      # type-check.
+      - name: Stub the built frontend
+        run: mkdir -p internal/ui/dist && touch internal/ui/dist/index.html
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+
+  image:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build (amd64, for testing)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: urtube:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run -d --name urtube --read-only --health-interval=2s \
+            --tmpfs /tmp --tmpfs /var/tmp:mode=1777 --tmpfs /data:mode=1777 \
+            --tmpfs /downloads:uid=1000,gid=1000 \
+            urtube:ci
+          for _ in $(seq 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' urtube)
+            [ "$status" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' urtube)" = true ] || break
+            sleep 2
+          done
+          docker logs urtube
+          docker exec urtube yt-dlp --version
+          docker exec urtube deno --version
+          docker exec urtube ffmpeg -version | head -1
+          test "$status" = healthy
+
+      - name: Scan for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.0
+          image-ref: urtube:ci
+          scanners: vuln
+          # Debian ships many CVEs it has decided not to fix; fail only on
+          # ones a rebuild or dependency bump can actually fix.
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Build (arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

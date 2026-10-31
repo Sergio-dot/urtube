@@ -32,6 +32,7 @@ FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1de
 
 # yt-dlp breaks whenever YouTube changes, so bump these together often: the
 # checksum is the "yt-dlp" line of the release's SHA2-256SUMS file.
+# .github/workflows/update-ytdlp.yml checks for new releases daily.
 ARG YTDLP_VERSION=2026.10.26
 ARG YTDLP_SHA256=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3
 
