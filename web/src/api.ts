@@ -26,6 +26,22 @@ export const FORMATS: Record<MediaType, readonly string[]> = {
   audio: ["mp3", "m4a", "wav", "opus"],
 };
 
+/** Describes a song: written into the file and used for its folder. */
+export interface Tags {
+  artist: string;
+  title: string;
+  album: string;
+  /** Release year, when known. */
+  year?: number;
+}
+
+/** What urtube would use for a download, for the user to check. */
+export interface TagSuggestion {
+  tags: Tags;
+  /** Artist folders already in the library. */
+  knownArtists: string[];
+}
+
 export interface DownloadOptions {
   type: MediaType;
   format: string;
@@ -130,10 +146,14 @@ export async function searchVideos(
   }
 }
 
-/** Starts downloading video and resolves to the new download's ID. */
+/**
+ * Starts downloading video and resolves to the new download's ID. Empty or
+ * missing tags are guessed by the server.
+ */
 export async function startDownload(
   video: Video,
   options: DownloadOptions,
+  tags?: Tags,
 ): Promise<string> {
   const { uuid } = await request<{ uuid: string }>("/download", {
     method: "POST",
@@ -143,9 +163,20 @@ export async function startDownload(
       videoId: video.id,
       title: video.title,
       options,
+      tags,
     }),
   });
   return uuid;
+}
+
+/** The tags urtube would use for the video at url. Takes a few seconds. */
+export function suggestTags(
+  url: string,
+  signal?: AbortSignal,
+): Promise<TagSuggestion> {
+  return request<TagSuggestion>(`/tags?${new URLSearchParams({ url })}`, {
+    signal,
+  });
 }
 
 export async function cancelDownload(id: string): Promise<void> {

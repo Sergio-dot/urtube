@@ -6,14 +6,26 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { FORMATS, type DownloadOptions, type MediaType } from "../api";
+import {
+  FORMATS,
+  type DownloadOptions,
+  type MediaType,
+  type Tags,
+  type Video,
+} from "../api";
+import { useTagSuggestion } from "../hooks/useTagSuggestion";
+import TagFields from "./TagFields";
+import { savedAs } from "../tags";
 
 interface DownloadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (options: DownloadOptions) => void;
+  /** tags is set when downloading a single video. */
+  onConfirm: (options: DownloadOptions, tags?: Tags) => void;
   title: string;
   initialOptions: DownloadOptions;
+  /** The video to download, when there is just one: its tags can be edited. */
+  video?: Video;
 }
 
 export default function DownloadModal({
@@ -22,9 +34,20 @@ export default function DownloadModal({
   onConfirm,
   title,
   initialOptions,
+  video,
 }: DownloadModalProps) {
   const [type, setType] = useState(initialOptions.type);
   const [format, setFormat] = useState(initialOptions.format);
+  const { suggestion, loading, error } = useTagSuggestion(video?.url ?? null);
+  // What the user typed; untouched fields show the suggestion.
+  const [edits, setEdits] = useState<Partial<Record<keyof Tags, string>>>({});
+
+  const tags: Tags = {
+    artist: edits.artist ?? suggestion?.tags.artist ?? "",
+    title: edits.title ?? suggestion?.tags.title ?? "",
+    album: edits.album ?? suggestion?.tags.album ?? "",
+    year: suggestion?.tags.year,
+  };
 
   const handleTypeChange = (newType: MediaType) => {
     setType(newType);
@@ -32,7 +55,7 @@ export default function DownloadModal({
   };
 
   const handleConfirm = () => {
-    onConfirm({ type, format });
+    onConfirm({ type, format }, video ? tags : undefined);
     onClose();
   };
 
@@ -120,7 +143,39 @@ export default function DownloadModal({
                         </button>
                       ))}
                     </div>
+                    {format === "wav" && (
+                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        WAV files can't hold cover art and only basic tags.
+                      </p>
+                    )}
                   </div>
+
+                  {video ? (
+                    <div>
+                      <TagFields
+                        values={tags}
+                        onChange={(field, value) =>
+                          setEdits((e) => ({ ...e, [field]: value }))
+                        }
+                        knownArtists={suggestion?.knownArtists ?? []}
+                        loading={loading}
+                        error={error}
+                      />
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Saved as{" "}
+                        <span className="font-mono">
+                          {loading && !edits.title
+                            ? "…"
+                            : savedAs(tags, type === "audio", format)}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Artist, title and album are detected for each video when
+                      its download starts.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
