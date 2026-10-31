@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,17 +100,34 @@ func TestSearchService(t *testing.T) {
 	})
 }
 
-// fakeFetcher runs fetch for every Fetch call.
+// fakeFetcher runs fetch for every Fetch call and records the folders it was
+// asked to download into.
 type fakeFetcher struct {
 	fetch func(ctx context.Context, req Request, onProgress func(Progress)) error
+
+	mu   sync.Mutex
+	dirs []string
 }
 
-func (f *fakeFetcher) Fetch(ctx context.Context, req Request, onProgress func(Progress)) error {
+func (f *fakeFetcher) Fetch(ctx context.Context, req Request, dir string, onProgress func(Progress)) error {
+	f.mu.Lock()
+	f.dirs = append(f.dirs, dir)
+	f.mu.Unlock()
 	if f.fetch == nil {
 		return nil
 	}
 	return f.fetch(ctx, req, onProgress)
 }
+
+// fixedDir is a Destination that always returns dir, or err if set.
+type fixedDir struct {
+	dir string
+	err error
+}
+
+func (d fixedDir) DownloadDir() (string, error) { return d.dir, d.err }
+
+var testDest = fixedDir{dir: "/library"}
 
 // blockingFetcher returns a fetcher that blocks until release is closed or
 // its context is cancelled.
@@ -166,8 +184,36 @@ func statusesUntilTerminal(t *testing.T, updates <-chan Download, id string) []S
 }
 
 func TestDownloadService_Lifecycle(t *testing.T) {
+	t.Run("rejects downloads while the folder is unavailable", func(t *testing.T) {
+		f := &fakeFetcher{}
+		svc := NewDownloadService(f, fixedDir{err: errors.New("/library is not writable: permission denied")}, 1)
+
+		_, err := svc.Start(validRequest)
+
+		assert.ErrorIs(t, err, ErrDownloadDirUnavailable)
+		assert.EqualError(t, err, "download folder unavailable: /library is not writable: permission denied")
+		_, active, unsubscribe := svc.Subscribe()
+		unsubscribe()
+		assert.Empty(t, active)
+	})
+
+	t.Run("downloads into the folder resolved at start", func(t *testing.T) {
+		f := &fakeFetcher{}
+		svc := NewDownloadService(f, testDest, 1)
+		_, updates, unsubscribe := svc.Subscribe()
+		defer unsubscribe()
+
+		d, err := svc.Start(validRequest)
+		assert.NoError(t, err)
+		statusesUntilTerminal(t, updates, d.ID)
+
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		assert.Equal(t, []string{"/library"}, f.dirs)
+	})
+
 	t.Run("rejects invalid requests", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{}, 1)
+		svc := NewDownloadService(&fakeFetcher{}, testDest, 1)
 		_, err := svc.Start(Request{URL: "--exec=id"})
 		assert.ErrorIs(t, err, ErrInvalidInput)
 	})
@@ -176,7 +222,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, req Request, onProgress func(Progress)) error {
 			onProgress(Progress{DownloadedBytes: 50, TotalBytes: 100})
 			return nil
-		}}, 1)
+		}}, testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()
 		defer unsubscribe()
 
@@ -204,7 +250,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 	t.Run("failed download reports the error", func(t *testing.T) {
 		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, req Request, onProgress func(Progress)) error {
 			return errors.New("HTTP Error 403: Forbidden")
-		}}, 1)
+		}}, testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()
 		defer unsubscribe()
 
@@ -220,7 +266,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 	})
 
 	t.Run("cancel stops a running download", func(t *testing.T) {
-		svc := NewDownloadService(blockingFetcher(make(chan struct{})), 1)
+		svc := NewDownloadService(blockingFetcher(make(chan struct{})), testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()
 		defer unsubscribe()
 
@@ -234,7 +280,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 	})
 
 	t.Run("cancel of unknown or ended download is ErrNotFound", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{}, 1)
+		svc := NewDownloadService(&fakeFetcher{}, testDest, 1)
 		assert.ErrorIs(t, svc.Cancel("nope"), ErrNotFound)
 
 		_, updates, unsubscribe := svc.Subscribe()
@@ -247,7 +293,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 
 func TestDownloadService_Concurrency(t *testing.T) {
 	release := make(chan struct{})
-	svc := NewDownloadService(blockingFetcher(release), 1)
+	svc := NewDownloadService(blockingFetcher(release), testDest, 1)
 	_, updates, unsubscribe := svc.Subscribe()
 	defer unsubscribe()
 
@@ -280,7 +326,7 @@ func TestDownloadService_Concurrency(t *testing.T) {
 
 func TestDownloadService_Subscribe(t *testing.T) {
 	t.Run("returns active downloads oldest first", func(t *testing.T) {
-		svc := NewDownloadService(blockingFetcher(make(chan struct{})), 1)
+		svc := NewDownloadService(blockingFetcher(make(chan struct{})), testDest, 1)
 		a, _ := svc.Start(validRequest)
 		b, _ := svc.Start(validRequest)
 
@@ -298,7 +344,7 @@ func TestDownloadService_Subscribe(t *testing.T) {
 	})
 
 	t.Run("unsubscribe closes the channel and is idempotent", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{}, 1)
+		svc := NewDownloadService(&fakeFetcher{}, testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()
 		unsubscribe()
 		unsubscribe()
@@ -307,7 +353,7 @@ func TestDownloadService_Subscribe(t *testing.T) {
 	})
 
 	t.Run("progress is dropped for a full subscriber, terminal updates are not", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{}, 1)
+		svc := NewDownloadService(&fakeFetcher{}, testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()
 		defer unsubscribe()
 
@@ -348,7 +394,7 @@ func TestDownloadService_Drain(t *testing.T) {
 
 	t.Run("waits for running downloads, cancels queued ones, closes subscribers", func(t *testing.T) {
 		release := make(chan struct{})
-		svc := NewDownloadService(blockingFetcher(release), 1)
+		svc := NewDownloadService(blockingFetcher(release), testDest, 1)
 		_, updates, _ := svc.Subscribe()
 
 		running, _ := svc.Start(validRequest)
@@ -383,7 +429,7 @@ func TestDownloadService_Drain(t *testing.T) {
 	})
 
 	t.Run("cancels downloads still running at the deadline", func(t *testing.T) {
-		svc := NewDownloadService(blockingFetcher(make(chan struct{})), 1)
+		svc := NewDownloadService(blockingFetcher(make(chan struct{})), testDest, 1)
 		_, updates, _ := svc.Subscribe()
 		d, _ := svc.Start(validRequest)
 
@@ -396,7 +442,7 @@ func TestDownloadService_Drain(t *testing.T) {
 	})
 
 	t.Run("rejects downloads and subscriptions afterwards", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{}, 1)
+		svc := NewDownloadService(&fakeFetcher{}, testDest, 1)
 		svc.Drain(context.Background())
 
 		_, err := svc.Start(validRequest)
@@ -410,7 +456,7 @@ func TestDownloadService_Drain(t *testing.T) {
 
 func TestDownloadService_StartsQueuedDownloadsInOrder(t *testing.T) {
 	release := make(chan struct{})
-	svc := NewDownloadService(blockingFetcher(release), 1)
+	svc := NewDownloadService(blockingFetcher(release), testDest, 1)
 	_, updates, unsubscribe := svc.Subscribe()
 	defer unsubscribe()
 

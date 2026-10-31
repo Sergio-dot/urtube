@@ -148,7 +148,14 @@ type VideoSource interface {
 
 // Fetcher downloads a single video to storage.
 type Fetcher interface {
-	// Fetch downloads the requested video, reporting progress through
-	// onProgress, until it completes or ctx is cancelled.
-	Fetch(ctx context.Context, req Request, onProgress func(Progress)) error
+	// Fetch downloads the requested video into dir, reporting progress
+	// through onProgress, until it completes or ctx is cancelled.
+	Fetch(ctx context.Context, req Request, dir string, onProgress func(Progress)) error
+}
+
+// Destination decides where finished downloads are saved.
+type Destination interface {
+	// DownloadDir returns the folder to save downloads to, or an error if it
+	// can't be used right now.
+	DownloadDir() (string, error)
 }

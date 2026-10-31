@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -56,6 +57,41 @@ func (a *api) cancelDownload(w http.ResponseWriter, r *http.Request) error {
 
 	writeJSON(w, http.StatusOK, downloadResponse{UUID: id, Message: "download cancelled"})
 	return nil
+}
+
+// getSettings handles GET /api/v1/settings.
+func (a *api) getSettings(w http.ResponseWriter, r *http.Request) error {
+	writeJSON(w, http.StatusOK, a.settingsResponse())
+	return nil
+}
+
+// updateSettings handles PUT /api/v1/settings.
+func (a *api) updateSettings(w http.ResponseWriter, r *http.Request) error {
+	var body settingsRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return statusError{status: http.StatusBadRequest, msg: "invalid request body"}
+	}
+
+	if err := a.Settings.SetDownloadDir(strings.TrimSpace(body.DownloadDir)); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, a.settingsResponse())
+	return nil
+}
+
+func (a *api) settingsResponse() settingsResponse {
+	dir, err := a.Settings.DownloadDir()
+	res := settingsResponse{
+		DownloadDir:        dir,
+		DefaultDownloadDir: a.Settings.DefaultDownloadDir(),
+		DownloadRoot:       a.Settings.Root(),
+	}
+	if err != nil {
+		res.DownloadDirError = err.Error()
+	}
+	return res
 }
 
 type healthResponse struct {

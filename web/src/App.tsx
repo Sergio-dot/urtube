@@ -8,6 +8,7 @@ import QueuePanel from "./components/QueuePanel";
 import DownloadModal from "./components/DownloadModal";
 import DownloadStatusOverlay from "./components/DownloadStatusOverlay";
 import Spinner from "./components/Spinner";
+import SettingsModal from "./components/SettingsModal";
 import { isValidOptions, type DownloadOptions, type Video } from "./api";
 import { downloadsByVideo } from "./downloads";
 import { useDownloads } from "./hooks/useDownloads";
@@ -15,6 +16,7 @@ import { useHealth } from "./hooks/useHealth";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { useQueue } from "./hooks/useQueue";
 import { useSearch } from "./hooks/useSearch";
+import { useSettings } from "./hooks/useSettings";
 
 const DEFAULT_OPTIONS: DownloadOptions = { type: "video", format: "mp4" };
 
@@ -35,6 +37,7 @@ function App() {
   const search = useSearch();
   const queue = useQueue();
   const { downloads, start, cancel, dismiss } = useDownloads();
+  const { settings, refresh: refreshSettings, saveDownloadDir } = useSettings();
   const [preferences, setPreferences] = useLocalStorage(
     "urtube_download_preferences",
     DEFAULT_OPTIONS,
@@ -45,6 +48,9 @@ function App() {
   const [error, setError] = useState<ErrorInfo>({ title: "", message: "" });
   const [showError, setShowError] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  // Remounts the settings dialog so it starts from the saved values.
+  const [settingsKey, setSettingsKey] = useState(0);
   const [pending, setPending] = useState<PendingDownload | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   // Remounts the modal for each request so it starts from the preferences.
@@ -62,6 +68,11 @@ function App() {
     setPending({ videos, fromQueue });
     setModalKey((k) => k + 1);
     setIsModalOpen(true);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setSettingsKey((k) => k + 1);
+    setShowSettings(true);
   }, []);
 
   const confirmDownload = async (options: DownloadOptions) => {
@@ -85,6 +96,8 @@ function App() {
       }
     }
     if (failures.length > 0) {
+      // A failure may be the download folder going bad: show it if so.
+      refreshSettings();
       setError({ title: "Download failed", message: failures.join("\n") });
       setShowError(true);
     }
@@ -109,13 +122,20 @@ function App() {
       <div className="navbar">
         <Navbar
           onTogglePanel={() => setShowPanel((open) => !open)}
+          onOpenSettings={openSettings}
           queueSize={queue.videos.length}
+          settingsAttention={Boolean(settings?.downloadDirError)}
         />
       </div>
 
       <main className="grow">
         <div className="form">
-          <Form onSearch={search.search} health={health} />
+          <Form
+            onSearch={search.search}
+            health={health}
+            downloadDirError={settings?.downloadDirError}
+            onOpenSettings={openSettings}
+          />
         </div>
 
         {search.loading ? (
@@ -161,6 +181,14 @@ function App() {
         onConfirm={confirmDownload}
         title={modalTitle}
         initialOptions={preferences}
+      />
+
+      <SettingsModal
+        key={settingsKey}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={settings}
+        onSaveDownloadDir={saveDownloadDir}
       />
 
       <DownloadStatusOverlay

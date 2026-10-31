@@ -36,9 +36,37 @@ func (f *fakeSearcher) Search(ctx context.Context, query string, limit int, incl
 // blockingFetcher blocks every download until its context is cancelled.
 type blockingFetcher struct{}
 
-func (blockingFetcher) Fetch(ctx context.Context, req media.Request, onProgress func(media.Progress)) error {
+func (blockingFetcher) Fetch(ctx context.Context, req media.Request, dir string, onProgress func(media.Progress)) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// fakeSettings stores the download folder in memory. dirErr, if set, is
+// reported for the current folder; setErr is returned by SetDownloadDir.
+type fakeSettings struct {
+	root   string
+	dir    string
+	dirErr error
+	setErr error
+}
+
+func (f *fakeSettings) DownloadDir() (string, error) {
+	if f.dir == "" {
+		return "/downloads", f.dirErr
+	}
+	return f.dir, f.dirErr
+}
+
+func (f *fakeSettings) DefaultDownloadDir() string { return "/downloads" }
+
+func (f *fakeSettings) Root() string { return f.root }
+
+func (f *fakeSettings) SetDownloadDir(dir string) error {
+	if f.setErr != nil {
+		return f.setErr
+	}
+	f.dir, f.dirErr = dir, nil
+	return nil
 }
 
 // drainNow drains svc, cancelling running downloads immediately.
@@ -53,8 +81,11 @@ func newTestRouter(t *testing.T, deps Deps) http.Handler {
 	if deps.Search == nil {
 		deps.Search = &fakeSearcher{}
 	}
+	if deps.Settings == nil {
+		deps.Settings = &fakeSettings{}
+	}
 	if deps.Downloads == nil {
-		svc := media.NewDownloadService(blockingFetcher{}, 2)
+		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 2)
 		t.Cleanup(func() { drainNow(svc) })
 		deps.Downloads = svc
 	}
@@ -186,7 +217,7 @@ func TestStartDownload(t *testing.T) {
 	})
 
 	t.Run("503 while shutting down", func(t *testing.T) {
-		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 		drainNow(svc)
 
 		w := do(newTestRouter(t, Deps{Downloads: svc}), http.MethodPost, "/api/v1/download", valid)
@@ -195,7 +226,7 @@ func TestStartDownload(t *testing.T) {
 }
 
 func TestCancelDownload(t *testing.T) {
-	svc := media.NewDownloadService(blockingFetcher{}, 1)
+	svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 	t.Cleanup(func() { drainNow(svc) })
 	h := newTestRouter(t, Deps{Downloads: svc})
 
@@ -228,7 +259,7 @@ func TestEvents(t *testing.T) {
 	audio := media.Options{Type: media.MediaAudio, Format: "mp3"}
 
 	t.Run("sends active downloads on connect", func(t *testing.T) {
-		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 		t.Cleanup(func() { drainNow(svc) })
 		running, _ := svc.Start(media.Request{URL: "https://example.com/1", Title: "One", Options: audio})
 		queued, _ := svc.Start(media.Request{URL: "https://example.com/2", Title: "Two", Options: audio})
@@ -246,7 +277,7 @@ func TestEvents(t *testing.T) {
 	})
 
 	t.Run("sends keep-alives", func(t *testing.T) {
-		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Millisecond)
 		defer cancel()
 
@@ -255,7 +286,7 @@ func TestEvents(t *testing.T) {
 	})
 
 	t.Run("ends when the service drains", func(t *testing.T) {
-		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 		d, _ := svc.Start(media.Request{URL: "https://example.com/1", Options: audio})
 
 		done := make(chan *httptest.ResponseRecorder, 1)
@@ -381,5 +412,59 @@ func TestUI(t *testing.T) {
 	t.Run("no UI is 404", func(t *testing.T) {
 		w := do(newTestRouter(t, Deps{}), http.MethodGet, "/", "")
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestSettings(t *testing.T) {
+	t.Run("get reports the folder and its problem", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{root: "/", dirErr: errors.New("/downloads is not writable: permission denied")}})
+
+		w := do(h, http.MethodGet, "/api/v1/settings", "")
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{
+			"downloadDir": "/downloads",
+			"defaultDownloadDir": "/downloads",
+			"downloadRoot": "/",
+			"downloadDirError": "/downloads is not writable: permission denied"
+		}`, w.Body.String())
+	})
+
+	t.Run("put changes the folder", func(t *testing.T) {
+		s := &fakeSettings{}
+		h := newTestRouter(t, Deps{Settings: s})
+
+		w := do(h, http.MethodPut, "/api/v1/settings", `{"downloadDir": " /media/music "}`)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"downloadDir": "/media/music", "defaultDownloadDir": "/downloads"}`, w.Body.String())
+		assert.Equal(t, "/media/music", s.dir, "surrounding whitespace is trimmed")
+	})
+
+	t.Run("put rejects invalid folders with the reason", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{setErr: media.InvalidInput("download folder must be an absolute path")}})
+
+		w := do(h, http.MethodPut, "/api/v1/settings", `{"downloadDir": "music"}`)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "download folder must be an absolute path", errorMessage(t, w))
+	})
+
+	t.Run("put rejects unknown fields", func(t *testing.T) {
+		h := newTestRouter(t, Deps{})
+		w := do(h, http.MethodPut, "/api/v1/settings", `{"tempDir": "/x"}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("downloads are refused while the folder is unavailable", func(t *testing.T) {
+		settings := &fakeSettings{dirErr: errors.New("/downloads is not writable: permission denied")}
+		svc := media.NewDownloadService(blockingFetcher{}, settings, 1)
+		t.Cleanup(func() { drainNow(svc) })
+		h := newTestRouter(t, Deps{Downloads: svc, Settings: settings})
+
+		w := do(h, http.MethodPost, "/api/v1/download", `{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"}}`)
+
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		assert.Equal(t, "download folder unavailable: /downloads is not writable: permission denied", errorMessage(t, w))
 	})
 }

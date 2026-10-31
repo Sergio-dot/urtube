@@ -27,9 +27,9 @@ func fakeExecutable(t *testing.T, body string) string {
 var audioMP3 = media.Options{Type: media.MediaAudio, Format: "mp3"}
 
 func TestFetcher_Command(t *testing.T) {
-	f := &Fetcher{DownloadDir: "/downloads"}
+	f := &Fetcher{}
 	args := func(opts media.Options) []string {
-		return f.command(opts, "/tmp/urtube/download-1").BuildCommand(context.Background(), "https://example.com/v").Args
+		return f.command(opts, "/downloads", "/tmp/urtube/download-1").BuildCommand(context.Background(), "https://example.com/v").Args
 	}
 
 	t.Run("partial files go to the temp dir, finished files to the download dir", func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestFetcher_Command(t *testing.T) {
 		t.Setenv("URTUBE_TEST_SECRET", "s3cret")
 		t.Setenv("TZ", "Europe/Rome")
 
-		env := f.command(audioMP3, "/tmp").BuildCommand(context.Background(), "https://example.com/v").Env
+		env := f.command(audioMP3, "/downloads", "/tmp").BuildCommand(context.Background(), "https://example.com/v").Env
 
 		assert.Contains(t, env, "TZ=Europe/Rome")
 		// PATH must survive, or yt-dlp cannot find ffmpeg.
@@ -120,9 +120,8 @@ func TestLineWriter(t *testing.T) {
 func TestFetcher_Fetch(t *testing.T) {
 	newFetcher := func(t *testing.T, script string) *Fetcher {
 		return &Fetcher{
-			Executable:  fakeExecutable(t, script),
-			DownloadDir: t.TempDir(),
-			TempDir:     t.TempDir(),
+			Executable: fakeExecutable(t, script),
+			TempDir:    t.TempDir(),
 		}
 	}
 	req := media.Request{URL: "https://example.com/v", Options: audioMP3}
@@ -134,7 +133,7 @@ echo 'urtube-progress:{"downloaded_bytes":50,"total_bytes":100,"speed":10,"eta":
 echo 'urtube-progress:{"downloaded_bytes":100,"total_bytes":100,"speed":10,"eta":0}'`)
 
 		var got []media.Progress
-		err := f.Fetch(context.Background(), req, func(p media.Progress) { got = append(got, p) })
+		err := f.Fetch(context.Background(), req, t.TempDir(), func(p media.Progress) { got = append(got, p) })
 
 		assert.NoError(t, err)
 		assert.Equal(t, []media.Progress{
@@ -151,13 +150,13 @@ echo 'WARNING: something minor' >&2
 echo 'ERROR: [youtube] xyz: Video unavailable' >&2
 exit 1`)
 
-		err := f.Fetch(context.Background(), req, nil)
+		err := f.Fetch(context.Background(), req, t.TempDir(), nil)
 		assert.EqualError(t, err, "[youtube] xyz: Video unavailable")
 	})
 
 	t.Run("missing executable", func(t *testing.T) {
-		f := &Fetcher{Executable: filepath.Join(t.TempDir(), "nope"), DownloadDir: t.TempDir()}
-		assert.Error(t, f.Fetch(context.Background(), req, nil))
+		f := &Fetcher{Executable: filepath.Join(t.TempDir(), "nope")}
+		assert.Error(t, f.Fetch(context.Background(), req, t.TempDir(), nil))
 	})
 }
 
@@ -271,22 +270,23 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("download audio", func(t *testing.T) {
-		f := &Fetcher{DownloadDir: t.TempDir(), TempDir: t.TempDir()}
+		f := &Fetcher{TempDir: t.TempDir()}
+		dir := t.TempDir()
 		var progressed bool
 		err := f.Fetch(context.Background(), media.Request{
 			URL:     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 			Options: audioMP3,
-		}, func(p media.Progress) { progressed = progressed || p.DownloadedBytes > 0 })
+		}, dir, func(p media.Progress) { progressed = progressed || p.DownloadedBytes > 0 })
 
 		assert.NoError(t, err)
 		assert.True(t, progressed, "expected at least one progress update")
-		files, _ := filepath.Glob(filepath.Join(f.DownloadDir, "*.mp3"))
+		files, _ := filepath.Glob(filepath.Join(dir, "*.mp3"))
 		assert.Len(t, files, 1)
 	})
 
 	t.Run("download failure", func(t *testing.T) {
-		f := &Fetcher{DownloadDir: t.TempDir(), TempDir: t.TempDir()}
-		err := f.Fetch(context.Background(), media.Request{URL: "https://example.com/invalid_video", Options: audioMP3}, nil)
+		f := &Fetcher{TempDir: t.TempDir()}
+		err := f.Fetch(context.Background(), media.Request{URL: "https://example.com/invalid_video", Options: audioMP3}, t.TempDir(), nil)
 		assert.Error(t, err)
 	})
 }

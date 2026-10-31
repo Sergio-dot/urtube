@@ -18,6 +18,7 @@ import (
 	"github.com/Sergio-dot/urtube/internal/httpapi"
 	"github.com/Sergio-dot/urtube/internal/media"
 	"github.com/Sergio-dot/urtube/internal/server"
+	"github.com/Sergio-dot/urtube/internal/settings"
 	"github.com/Sergio-dot/urtube/internal/ytdlp"
 	"github.com/Sergio-dot/urtube/web"
 )
@@ -60,10 +61,21 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	for _, dir := range []string{cfg.DownloadDir, cfg.TempDir} {
-		if err := health.CheckWritableDir(dir); err != nil {
-			return err
-		}
+	// In-progress files have nowhere else to go, so the temp dir must work.
+	if err := health.CheckWritableDir(cfg.TempDir); err != nil {
+		return err
+	}
+
+	// The download folder can be fixed from the app, so a bad one only warns:
+	// the UI stays reachable and downloads are refused until it's fixed.
+	store, err := settings.Open(cfg.DataDir, cfg.DownloadDir, cfg.DownloadRoot)
+	if err != nil {
+		slog.Warn("could not load saved settings, using defaults", "error", err)
+	}
+	downloadDir, err := store.DownloadDir()
+	if err != nil {
+		slog.Warn("download folder unavailable: downloads will fail until it is fixed or another folder is chosen in Settings",
+			"error", err)
 	}
 
 	ui, err := web.Dist()
@@ -71,16 +83,17 @@ func run() error {
 		return fmt.Errorf("load embedded UI: %w", err)
 	}
 
-	fetcher := &ytdlp.Fetcher{DownloadDir: cfg.DownloadDir, TempDir: cfg.TempDir}
+	fetcher := &ytdlp.Fetcher{TempDir: cfg.TempDir}
 	if err := fetcher.RemoveStaleTempDirs(); err != nil {
 		slog.Warn("could not remove leftover temp files", "error", err)
 	}
-	downloads := media.NewDownloadService(fetcher, cfg.MaxConcurrentDownloads)
+	downloads := media.NewDownloadService(fetcher, store, cfg.MaxConcurrentDownloads)
 
 	var shuttingDown atomic.Bool
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Search:       media.NewSearchService(&ytdlp.Searcher{}),
 		Downloads:    downloads,
+		Settings:     store,
 		UI:           ui,
 		Config:       *cfg,
 		YtdlpVersion: deps.YtdlpVersion,
@@ -94,7 +107,7 @@ func run() error {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Start() }()
-	slog.Info("ready", "ytdlp", deps.YtdlpVersion, "downloadDir", cfg.DownloadDir,
+	slog.Info("ready", "ytdlp", deps.YtdlpVersion, "downloadDir", downloadDir,
 		"maxConcurrentDownloads", cfg.MaxConcurrentDownloads)
 
 	select {

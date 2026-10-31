@@ -3,6 +3,7 @@ package media
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -19,6 +20,7 @@ const subscriberBuffer = 16
 // subscribers. All state is kept in memory: urtube runs as a single instance.
 type DownloadService struct {
 	fetcher       Fetcher
+	destination   Destination
 	maxConcurrent int
 
 	mu          sync.Mutex
@@ -36,15 +38,18 @@ type job struct {
 	seq    uint64
 	state  Download
 	req    Request
+	dir    string // where the finished files go, fixed when it was started
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-// NewDownloadService creates a DownloadService that runs at most
-// maxConcurrent downloads at once; further downloads wait as StatusQueued.
-func NewDownloadService(fetcher Fetcher, maxConcurrent int) *DownloadService {
+// NewDownloadService creates a DownloadService that saves downloads where
+// destination says and runs at most maxConcurrent at once; further downloads
+// wait as StatusQueued.
+func NewDownloadService(fetcher Fetcher, destination Destination, maxConcurrent int) *DownloadService {
 	return &DownloadService{
 		fetcher:       fetcher,
+		destination:   destination,
 		maxConcurrent: max(maxConcurrent, 1),
 		jobs:          make(map[string]*job),
 		subscribers:   make(map[chan Download]struct{}),
@@ -55,6 +60,12 @@ func NewDownloadService(fetcher Fetcher, maxConcurrent int) *DownloadService {
 func (s *DownloadService) Start(req Request) (Download, error) {
 	if err := req.Validate(); err != nil {
 		return Download{}, err
+	}
+	// Checked up front so a misconfigured folder fails the request instead of
+	// every queued download.
+	dir, err := s.destination.DownloadDir()
+	if err != nil {
+		return Download{}, fmt.Errorf("%w: %w", ErrDownloadDirUnavailable, err)
 	}
 
 	s.mu.Lock()
@@ -74,6 +85,7 @@ func (s *DownloadService) Start(req Request) (Download, error) {
 			Status:  StatusQueued,
 		},
 		req:    req,
+		dir:    dir,
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -103,7 +115,7 @@ func (s *DownloadService) dispatchLocked() {
 }
 
 func (s *DownloadService) run(j *job) {
-	err := s.fetcher.Fetch(j.ctx, j.req, func(p Progress) {
+	err := s.fetcher.Fetch(j.ctx, j.req, j.dir, func(p Progress) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if j.state.Status != StatusDownloading {

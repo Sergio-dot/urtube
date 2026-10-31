@@ -71,6 +71,20 @@ func newVideoResponse(v media.Video) videoResponse {
 	}
 }
 
+type settingsRequest struct {
+	// DownloadDir is an absolute path; empty restores the default.
+	DownloadDir string `json:"downloadDir"`
+}
+
+type settingsResponse struct {
+	DownloadDir        string `json:"downloadDir"`
+	DefaultDownloadDir string `json:"defaultDownloadDir"`
+	// DownloadRoot is the folder a download folder must be inside, if any.
+	DownloadRoot string `json:"downloadRoot,omitempty"`
+	// DownloadDirError explains why downloads can't be saved right now.
+	DownloadDirError string `json:"downloadDirError,omitempty"`
+}
+
 // downloadEvent is one message on the event stream. Progress values are
 // preformatted for display and empty when unknown.
 type downloadEvent struct {

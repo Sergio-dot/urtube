@@ -46,7 +46,7 @@ func errorStatus(err error) (int, string) {
 		return http.StatusBadRequest, err.Error()
 	case errors.Is(err, media.ErrNotFound), errors.Is(err, media.ErrNoResults):
 		return http.StatusNotFound, err.Error()
-	case errors.Is(err, media.ErrDraining):
+	case errors.Is(err, media.ErrDraining), errors.Is(err, media.ErrDownloadDirUnavailable):
 		return http.StatusServiceUnavailable, err.Error()
 	default:
 		return http.StatusInternalServerError, "internal server error"

@@ -22,8 +22,15 @@ type Config struct {
 	HTTPHost string
 	// HTTPPort is the port the server will bind to.
 	HTTPPort string
-	// DownloadDir is the directory where finished downloads are saved.
+	// DownloadDir is the default directory where finished downloads are
+	// saved; users can pick another one in the app's settings.
 	DownloadDir string
+	// DownloadRoot, if set, is the folder every download folder must be
+	// inside, including one chosen in the app. Empty allows any folder.
+	DownloadRoot string
+	// DataDir holds urtube's own state, such as the settings saved from the
+	// app.
+	DataDir string
 	// TempDir is where in-progress downloads are written before being moved to
 	// DownloadDir, so partial files never appear in a watched media library.
 	TempDir string
@@ -48,6 +55,8 @@ const (
 	keyHTTPPort        = "URTUBE_HTTP_PORT"
 	keyDownloadDir     = "URTUBE_DOWNLOAD_DIR"
 	keyTempDir         = "URTUBE_TEMP_DIR"
+	keyDataDir         = "URTUBE_DATA_DIR"
+	keyDownloadRoot    = "URTUBE_DOWNLOAD_ROOT"
 	keyMaxConcurrent   = "URTUBE_MAX_CONCURRENT_DOWNLOADS"
 	keyShutdownTimeout = "URTUBE_SHUTDOWN_TIMEOUT"
 	keyLogLevel        = "URTUBE_LOG_LEVEL"
@@ -76,6 +85,7 @@ func Load() (*Config, error) {
 	v.SetDefault(keyHTTPPort, "8080")
 	v.SetDefault(keyDownloadDir, "./downloads")
 	v.SetDefault(keyTempDir, filepath.Join(os.TempDir(), "urtube"))
+	v.SetDefault(keyDataDir, "./data")
 	v.SetDefault(keyMaxConcurrent, 2)
 	v.SetDefault(keyShutdownTimeout, "5s")
 	v.SetDefault(keyLogLevel, "info")
@@ -131,6 +141,8 @@ func NewConfigWithViper(v *viper.Viper) (*Config, error) {
 		HTTPPort:               port,
 		DownloadDir:            v.GetString(keyDownloadDir),
 		TempDir:                v.GetString(keyTempDir),
+		DataDir:                v.GetString(keyDataDir),
+		DownloadRoot:           v.GetString(keyDownloadRoot),
 		MaxConcurrentDownloads: maxConcurrent,
 		ShutdownTimeout:        timeout,
 		LogLevel:               level,
@@ -144,6 +156,15 @@ func NewConfigWithViper(v *viper.Viper) (*Config, error) {
 	}
 	if cfg.TempDir == "" {
 		return nil, fmt.Errorf("%s: must not be empty", keyTempDir)
+	}
+	if cfg.DataDir == "" {
+		return nil, fmt.Errorf("%s: must not be empty", keyDataDir)
+	}
+	if cfg.DownloadRoot != "" {
+		if !filepath.IsAbs(cfg.DownloadRoot) {
+			return nil, fmt.Errorf("%s: must be an absolute path, got %q", keyDownloadRoot, cfg.DownloadRoot)
+		}
+		cfg.DownloadRoot = filepath.Clean(cfg.DownloadRoot)
 	}
 
 	return cfg, nil

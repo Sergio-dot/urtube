@@ -28,10 +28,25 @@ type Downloads interface {
 	Subscribe() (active []media.Download, updates <-chan media.Download, unsubscribe func())
 }
 
+// Settings reads and changes the settings users edit in the app.
+// *settings.Store implements it.
+type Settings interface {
+	// DownloadDir returns the current download folder and why it can't be
+	// used, if it can't.
+	DownloadDir() (string, error)
+	DefaultDownloadDir() string
+	// Root is the folder download folders must be inside; "" allows any.
+	Root() string
+	// SetDownloadDir changes the download folder; "" restores the default.
+	// Validation errors match media.ErrInvalidInput.
+	SetDownloadDir(dir string) error
+}
+
 // Deps holds what the HTTP layer needs.
 type Deps struct {
 	Search    Searcher
 	Downloads Downloads
+	Settings  Settings
 	// UI is the built frontend, containing index.html. Nil serves 404s.
 	UI fs.FS
 	// Config configures request logging.
@@ -86,6 +101,8 @@ func newRouter(a *api) http.Handler {
 			r.Get("/search/{query}", handle(a.search))
 			r.Post("/download", handle(a.startDownload))
 			r.Delete("/download/{id}", handle(a.cancelDownload))
+			r.Get("/settings", handle(a.getSettings))
+			r.Put("/settings", handle(a.updateSettings))
 		})
 	})
 

@@ -14,7 +14,7 @@ import (
 func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		keyHTTPHost, keyHTTPPort, keyDownloadDir, keyTempDir, keyMaxConcurrent, keyShutdownTimeout,
+		keyHTTPHost, keyHTTPPort, keyDownloadDir, keyTempDir, keyDataDir, keyDownloadRoot, keyMaxConcurrent, keyShutdownTimeout,
 		keyLogLevel, keyLogJSON, keyLogConcise, keyLogHeaders,
 	} {
 		t.Setenv(k, "")
@@ -30,6 +30,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "8080", cfg.HTTPPort)
 	assert.Equal(t, "./downloads", cfg.DownloadDir)
 	assert.Equal(t, filepath.Join(os.TempDir(), "urtube"), cfg.TempDir)
+	assert.Equal(t, "./data", cfg.DataDir)
+	assert.Equal(t, "", cfg.DownloadRoot, "no restriction by default")
 	assert.Equal(t, 2, cfg.MaxConcurrentDownloads)
 	assert.Equal(t, 5*time.Second, cfg.ShutdownTimeout)
 	assert.Equal(t, slog.LevelInfo, cfg.LogLevel)
@@ -43,6 +45,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv(keyHTTPPort, "9090")
 	t.Setenv(keyDownloadDir, "/srv/media/music")
 	t.Setenv(keyTempDir, "/scratch")
+	t.Setenv(keyDataDir, "/var/lib/urtube")
+	t.Setenv(keyDownloadRoot, "/srv/media/")
 	t.Setenv(keyMaxConcurrent, "4")
 	t.Setenv(keyShutdownTimeout, "1m")
 	t.Setenv(keyLogLevel, "debug")
@@ -56,6 +60,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	assert.Equal(t, "9090", cfg.HTTPPort)
 	assert.Equal(t, "/srv/media/music", cfg.DownloadDir)
 	assert.Equal(t, "/scratch", cfg.TempDir)
+	assert.Equal(t, "/var/lib/urtube", cfg.DataDir)
+	assert.Equal(t, "/srv/media", cfg.DownloadRoot)
 	assert.Equal(t, 4, cfg.MaxConcurrentDownloads)
 	assert.Equal(t, time.Minute, cfg.ShutdownTimeout)
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
@@ -87,6 +93,7 @@ func TestLoad_Invalid(t *testing.T) {
 		{name: "unparsable shutdown timeout", key: keyShutdownTimeout, value: "soon"},
 		{name: "non-positive shutdown timeout", key: keyShutdownTimeout, value: "0s"},
 		{name: "zero concurrent downloads", key: keyMaxConcurrent, value: "0"},
+		{name: "relative download root", key: keyDownloadRoot, value: "media"},
 		{name: "non-numeric concurrent downloads", key: keyMaxConcurrent, value: "many"},
 	}
 

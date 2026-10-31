@@ -5,6 +5,7 @@ import {
 } from "@headlessui/react";
 import {
   Bars3Icon,
+  Cog6ToothIcon,
   InboxIcon,
   XMarkIcon,
   SunIcon,
@@ -21,10 +22,15 @@ const linkClass = (current: boolean) =>
 
 export default function Navbar({
   onTogglePanel,
+  onOpenSettings,
   queueSize,
+  settingsAttention,
 }: {
   onTogglePanel: () => void;
+  onOpenSettings: () => void;
   queueSize: number;
+  /** Marks the settings button when something there needs fixing. */
+  settingsAttention: boolean;
 }) {
   const { theme, toggleTheme } = useTheme();
   return (
@@ -95,6 +101,20 @@ export default function Navbar({
                 </span>
               )}
               <InboxIcon aria-hidden="true" className="size-6" />
+            </button>
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              aria-label={
+                settingsAttention ? "Settings (needs attention)" : "Settings"
+              }
+              title="Settings"
+              className="relative rounded-full p-1 text-gray-500 hover:text-gray-900 focus:outline-2 dark:text-gray-400 dark:hover:text-white"
+            >
+              {settingsAttention && (
+                <span className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-gray-900" />
+              )}
+              <Cog6ToothIcon aria-hidden="true" className="size-6" />
             </button>
             <button
               onClick={toggleTheme}
