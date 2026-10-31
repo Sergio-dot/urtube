@@ -19,9 +19,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Build frontend
+        working-directory: web
         run: |
-          cd web
           npm ci
+          npm run lint
+          npm test
           npm run build
 
       - name: Set up Go
