@@ -89,7 +89,6 @@ func newRouter(a *api) http.Handler {
 	r.Use(middleware.Heartbeat("/livez"))
 	r.Use(readiness("/readyz", a.Ready))
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.StripSlashes)
 	r.Use(middleware.CleanPath)
 	r.Use(httplog.RequestLogger(httpLogger))
