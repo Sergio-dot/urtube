@@ -7,13 +7,16 @@ meant for one household: one instance, no accounts.
 
 ## Running with Docker Compose
 
-1. Find the owner of the folder downloads should go to: `stat -c '%u:%g' /path/to/library`.
+1. Pick the folder downloads should go to. It must already exist (Docker
+   would otherwise create it owned by root, where urtube can't write), and
+   note its owner: `stat -c '%u:%g' /path/to/library`.
 2. Next to `compose.yaml`, create a `.env` file:
 
    ```sh
    LIBRARY_DIR=/srv/media/jellyfin/data/music
    PUID=1000
    PGID=1000
+   # MEDIA_ROOT=/srv/media
    # HOST_PORT=8080
    ```
 
@@ -24,9 +27,23 @@ meant for one household: one instance, no accounts.
    ```
 
 The container runs as `PUID:PGID` with a read-only root filesystem and no
-capabilities. Finished files appear in the library only when complete:
+capabilities. Settings changed in the app are kept in the `data` volume.
+Finished files appear in the library only when complete:
 in-progress downloads live in the `work` volume and leftovers from a crash are
 removed on the next start.
+
+**Download folder.** `LIBRARY_DIR` is the default download folder, a path on
+the host. compose mounts host folders at the same path inside the container,
+so the app's Settings (gear icon) shows and accepts the host's own paths. A
+container can only write to folders mounted into it: Settings can pick any
+folder inside `MEDIA_ROOT` (the folder mounted; defaults to `LIBRARY_DIR`)
+and refuses others. With `MEDIA_ROOT=/srv/media`, for example, you can switch
+between `/srv/media/jellyfin/data/music` and `/srv/media/podcasts`. Keep
+`MEDIA_ROOT` as narrow as practical: anyone who can open urtube can save into
+it. The folder chosen in Settings is saved and takes precedence over
+`LIBRARY_DIR`; **Use default** goes back to it. If the folder isn't writable,
+urtube still starts: the app shows the problem and refuses downloads until it
+is fixed.
 
 **Updating yt-dlp.** YouTube changes often break older yt-dlp releases. The
 image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`;
@@ -50,8 +67,10 @@ the binary directly):
 | --- | --- | --- |
 | `URTUBE_HTTP_HOST` | *(all interfaces)* | Address to listen on |
 | `URTUBE_HTTP_PORT` | `8080` | Port to listen on |
-| `URTUBE_DOWNLOAD_DIR` | `./downloads` (`/downloads` in the image) | Where finished files are saved |
+| `URTUBE_DOWNLOAD_DIR` | `./downloads` (`/downloads` in the image) | Default folder for finished files; a folder chosen in Settings takes precedence |
+| `URTUBE_DOWNLOAD_ROOT` | *(none)* | If set, download folders (including one chosen in Settings) must be inside it |
 | `URTUBE_TEMP_DIR` | `$TMPDIR/urtube` (`/var/tmp/urtube` in the image) | Where in-progress downloads are written |
+| `URTUBE_DATA_DIR` | `./data` (`/data` in the image) | Where settings changed in the app are saved |
 | `URTUBE_MAX_CONCURRENT_DOWNLOADS` | `2` | Downloads running at once; the rest wait in a queue |
 | `URTUBE_SHUTDOWN_TIMEOUT` | `5s` | How long running downloads may continue after a stop signal |
 | `URTUBE_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |

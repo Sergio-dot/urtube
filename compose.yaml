@@ -1,5 +1,10 @@
-# Usage: set LIBRARY_DIR (and PUID/PGID) in a .env file next to this one, then
+# Usage: set LIBRARY_DIR (and PUID/PGID, optionally MEDIA_ROOT) in a .env file
+# next to this one, then
 #   docker compose up -d --build
+#
+# Host folders are mounted at the same path inside the container, so the
+# paths shown and typed in the app's Settings are the real ones on this
+# machine.
 services:
   urtube:
     build: .
@@ -17,11 +22,23 @@ services:
       # below stop_grace_period so Docker doesn't kill urtube first.
       URTUBE_SHUTDOWN_TIMEOUT: 60s
       URTUBE_LOG_LEVEL: info
+      # Default download folder, e.g. a Jellyfin music library.
+      URTUBE_DOWNLOAD_DIR: ${LIBRARY_DIR:?set LIBRARY_DIR in .env to an absolute host path}
+      # Settings can only pick folders inside this one.
+      URTUBE_DOWNLOAD_ROOT: ${MEDIA_ROOT:-${LIBRARY_DIR}}
     volumes:
-      # Finished downloads, e.g. a Jellyfin music library.
-      - ${LIBRARY_DIR:-./downloads}:/downloads
+      # The host folder urtube may save into: MEDIA_ROOT, or just LIBRARY_DIR.
+      # It must already exist, owned by PUID:PGID: Docker would otherwise
+      # create it owned by root, where urtube can't write.
+      - type: bind
+        source: ${MEDIA_ROOT:-${LIBRARY_DIR}}
+        target: ${MEDIA_ROOT:-${LIBRARY_DIR}}
+        bind:
+          create_host_path: false
       # In-progress downloads, kept on disk rather than in memory.
       - work:/var/tmp
+      # Settings saved from the app.
+      - data:/data
     tmpfs:
       - /tmp:mode=1777,size=512m
     read_only: true
@@ -31,3 +48,4 @@ services:
 
 volumes:
   work:
+  data:

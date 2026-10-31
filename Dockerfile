@@ -51,12 +51,16 @@ ADD --checksum=sha256:${YTDLP_SHA256} --chmod=755 \
     https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=build /out/urtube /usr/local/bin/urtube
 
-RUN install -d -o 1000 -g 1000 /downloads
+# /data holds settings saved from the app; world-writable (like /var/tmp) so
+# a volume mounted there works whatever user the container runs as.
+RUN install -d -o 1000 -g 1000 /downloads && install -d -m 1777 /data
 
 # The root filesystem can be read-only: caches go under /tmp (a tmpfs in
-# compose.yaml) and in-progress downloads under /var/tmp (a volume).
+# compose.yaml), in-progress downloads under /var/tmp and settings under /data
+# (volumes).
 ENV URTUBE_DOWNLOAD_DIR=/downloads \
     URTUBE_TEMP_DIR=/var/tmp/urtube \
+    URTUBE_DATA_DIR=/data \
     HOME=/tmp \
     XDG_CACHE_HOME=/tmp/.cache
 
