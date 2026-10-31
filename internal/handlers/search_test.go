@@ -87,3 +87,41 @@ func TestSearchMediaNoResults(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.Contains(t, w.Body.String(), "no results found")
 }
+
+func TestSearchMediaLimit(t *testing.T) {
+	tests := []struct {
+		name     string
+		query    string
+		expected int
+	}{
+		{name: "missing limit uses default", query: "", expected: defaultSearchLimit},
+		{name: "valid limit is passed through", query: "?limit=20", expected: 20},
+		{name: "limit above max is clamped", query: "?limit=100000", expected: maxSearchLimit},
+		{name: "non-positive limit uses default", query: "?limit=-3", expected: defaultSearchLimit},
+		{name: "non-numeric limit uses default", query: "?limit=abc", expected: defaultSearchLimit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got int
+			mock := &mockSearcher{
+				MockSearch: func(ctx context.Context, param string, limit int, wantLiveStreams bool) ([]*ytdlp.ExtractedInfo, error) {
+					got = limit
+					return []*ytdlp.ExtractedInfo{{Title: strutils.StringPtr("Test Video")}}, nil
+				},
+			}
+			handler := &SearchHandler{Searcher: mock}
+
+			req := httptest.NewRequest(http.MethodGet, "/search/test"+tt.query, nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("searchParam", "test")
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+			w := httptest.NewRecorder()
+
+			httputils.MakeHandler(handler.SearchMedia).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
