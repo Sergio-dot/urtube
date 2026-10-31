@@ -39,8 +39,6 @@ var passthroughEnv = []string{
 type Fetcher struct {
 	// Executable is the name or path of yt-dlp. Empty uses "yt-dlp".
 	Executable string
-	// DownloadDir is the directory where finished downloads are saved.
-	DownloadDir string
 	// TempDir is the parent of the per-download directories that hold
 	// in-progress files. Empty uses the system default.
 	TempDir string
@@ -48,8 +46,8 @@ type Fetcher struct {
 
 // Fetch downloads req with yt-dlp. In-progress and intermediate files are
 // written to a temporary directory, removed afterwards, and only finished
-// files are moved into DownloadDir.
-func (f *Fetcher) Fetch(ctx context.Context, req media.Request, onProgress func(media.Progress)) error {
+// files are moved into dir.
+func (f *Fetcher) Fetch(ctx context.Context, req media.Request, dir string, onProgress func(media.Progress)) error {
 	tempDir, err := os.MkdirTemp(f.TempDir, tempDirPattern)
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
@@ -59,7 +57,7 @@ func (f *Fetcher) Fetch(ctx context.Context, req media.Request, onProgress func(
 
 	// go-ytdlp only builds the command line: urtube runs the process itself so
 	// that cancelling also kills yt-dlp's children (see killProcessGroupOnCancel).
-	cmd := f.command(req.Options, tempDir).BuildCommand(ctx, req.URL)
+	cmd := f.command(req.Options, dir, tempDir).BuildCommand(ctx, req.URL)
 	if cmd.Err != nil {
 		return fmt.Errorf("resolve yt-dlp: %w", cmd.Err)
 	}
@@ -126,10 +124,10 @@ func newCommand(executable string) *ytdlp.Command {
 	return cmd
 }
 
-// command builds the yt-dlp command line for opts.
-func (f *Fetcher) command(opts media.Options, tempDir string) *ytdlp.Command {
+// command builds the yt-dlp command line for opts, saving into dir.
+func (f *Fetcher) command(opts media.Options, dir, tempDir string) *ytdlp.Command {
 	cmd := newCommand(f.Executable).
-		Paths("home:" + f.DownloadDir).
+		Paths("home:" + dir).
 		Paths("temp:" + tempDir).
 		// Must stay relative: yt-dlp ignores --paths for an absolute output template.
 		Output("%(title)s.%(ext)s").

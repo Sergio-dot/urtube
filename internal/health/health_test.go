@@ -29,7 +29,7 @@ func TestCheckWritableDir(t *testing.T) {
 		assert.NoError(t, os.Chmod(dir, 0o555))
 		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 
-		assert.ErrorContains(t, CheckWritableDir(dir), "not writable")
+		assert.EqualError(t, CheckWritableDir(dir), dir+" is not writable: permission denied")
 	})
 }
 

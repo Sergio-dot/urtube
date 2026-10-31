@@ -5,6 +5,7 @@ package health
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -49,12 +50,12 @@ func CheckDependencies(ctx context.Context) (Dependencies, error) {
 // in it, catching wrong ownership or a missing mount before any download runs.
 func CheckWritableDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
+		return fmt.Errorf("cannot create %s: %w", dir, pathCause(err))
 	}
 
 	f, err := os.CreateTemp(dir, ".urtube-write-check-*")
 	if err != nil {
-		return fmt.Errorf("%s is not writable: %w", dir, err)
+		return fmt.Errorf("%s is not writable: %w", dir, pathCause(err))
 	}
 	name := f.Name()
 	if err := f.Close(); err != nil {
@@ -64,4 +65,15 @@ func CheckWritableDir(dir string) error {
 		return fmt.Errorf("remove %s: %w", name, err)
 	}
 	return nil
+}
+
+// pathCause strips the path from a filesystem error, which already names it
+// or names a scratch file the user never sees: "permission denied" rather
+// than "open /x/.urtube-write-check-123: permission denied".
+func pathCause(err error) error {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	return err
 }

@@ -17,7 +17,7 @@ import (
 )
 
 func TestFetcher_CancelKillsChildren(t *testing.T) {
-	f := &Fetcher{DownloadDir: t.TempDir(), TempDir: t.TempDir()}
+	f := &Fetcher{TempDir: t.TempDir()}
 	req := media.Request{URL: "https://example.com/v", Options: audioMP3}
 
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
@@ -30,7 +30,7 @@ wait`)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- f.Fetch(ctx, req, nil) }()
+	go func() { done <- f.Fetch(ctx, req, t.TempDir(), nil) }()
 
 	var childPID int
 	assert.Eventually(t, func() bool {

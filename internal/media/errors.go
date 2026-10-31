@@ -11,6 +11,9 @@ var (
 	ErrNoResults = errors.New("no results found")
 	// ErrDraining is returned by Start once the service is shutting down.
 	ErrDraining = errors.New("server is shutting down")
+	// ErrDownloadDirUnavailable is returned by Start when finished downloads
+	// could not be saved, e.g. because the folder isn't writable.
+	ErrDownloadDirUnavailable = errors.New("download folder unavailable")
 )
 
 // inputError is a validation error whose message is safe to show to clients.
@@ -20,6 +23,10 @@ type inputError string
 func (e inputError) Error() string { return string(e) }
 
 func (e inputError) Is(target error) bool { return target == ErrInvalidInput }
+
+// InvalidInput returns a validation error with a message safe to show to
+// clients, for adapters that validate input on the core's behalf.
+func InvalidInput(msg string) error { return inputError(msg) }
 
 var (
 	ErrQueryRequired    error = inputError("search query is required")
