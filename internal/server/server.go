@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 )
 
 // Server is the server definition
@@ -37,6 +38,9 @@ func NewServer(addr string, handler http.Handler) (*Server, error) {
 		server: &http.Server{
 			Addr:    addr,
 			Handler: handler,
+			// Guards against clients that open connections and send headers
+			// slowly. No write timeout: event streams stay open indefinitely.
+			ReadHeaderTimeout: 10 * time.Second,
 		},
 		listener: ln,
 	}, nil

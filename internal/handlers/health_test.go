@@ -10,20 +10,30 @@ import (
 )
 
 func TestHealthHandler(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
+	tests := []struct {
+		name           string
+		version        string
+		expectedStatus string
+		expectedYtdlp  bool
+	}{
+		{name: "reports the detected version", version: "2026.10.01", expectedStatus: "ok", expectedYtdlp: true},
+		{name: "degraded without yt-dlp", version: "", expectedStatus: "degraded", expectedYtdlp: false},
+	}
 
-	err := HealthHandler(w, req)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &HealthHandler{YtdlpVersion: tt.version}
+			req := httptest.NewRequest(http.MethodGet, "/health", nil)
+			w := httptest.NewRecorder()
 
-	assert.Equal(t, http.StatusOK, w.Code)
+			assert.NoError(t, h.HandleHealth(w, req))
+			assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp HealthResponse
-	err = json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.NoError(t, err)
-
-	// Since we expect it to be installed on the machine running tests
-	// but we can't be 100% sure in every environment, we just check
-	// that the fields exist.
-	assert.NotEmpty(t, resp.Status)
+			var resp HealthResponse
+			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Equal(t, tt.expectedStatus, resp.Status)
+			assert.Equal(t, tt.expectedYtdlp, resp.Dependencies.Ytdlp)
+			assert.Equal(t, tt.version, resp.Dependencies.Version)
+		})
+	}
 }

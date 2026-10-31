@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"bytes"
 	"net/http"
-	"os/exec"
-	"strings"
 
 	"github.com/Sergio-dot/urtube/pkg/httputils"
 )
@@ -22,24 +19,20 @@ type HealthResponse struct {
 	} `json:"dependencies"`
 }
 
-// HealthHandler handles the health check request.
-func HealthHandler(w http.ResponseWriter, r *http.Request) error {
-	res := HealthResponse{
-		Status: "ok",
-	}
+// HealthHandler reports the dependency status determined at startup.
+type HealthHandler struct {
+	// YtdlpVersion is the yt-dlp version detected at startup. Empty means
+	// yt-dlp is unavailable.
+	YtdlpVersion string
+}
 
-	path, err := exec.LookPath("yt-dlp")
-	res.Dependencies.Ytdlp = (err == nil)
-
+// HandleHealth handles the health check request.
+func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) error {
+	res := HealthResponse{Status: "ok"}
+	res.Dependencies.Ytdlp = h.YtdlpVersion != ""
+	res.Dependencies.Version = h.YtdlpVersion
 	if !res.Dependencies.Ytdlp {
 		res.Status = "degraded"
-	} else {
-		cmd := exec.Command(path, "--version")
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		if err := cmd.Run(); err == nil {
-			res.Dependencies.Version = strings.TrimSpace(out.String())
-		}
 	}
 
 	httputils.WriteJSON(w, http.StatusOK, res)
