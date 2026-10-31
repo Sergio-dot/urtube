@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -23,7 +24,8 @@ const musicFields = "%(.{id,title,track,artist,artists,album,release_year,releas
 
 // SearchMusic searches YouTube Music songs. The search itself only yields
 // IDs, so each song is then looked up (in parallel) for its artist, album,
-// duration and thumbnail. Songs whose lookup fails are left out.
+// duration and thumbnail. Songs whose lookup fails are left out; if every
+// lookup fails, the first error is returned.
 func (s *Searcher) SearchMusic(ctx context.Context, query string, limit int) ([]media.Video, error) {
 	ids, err := s.musicIDs(ctx, query, limit)
 	if err != nil {
@@ -31,6 +33,7 @@ func (s *Searcher) SearchMusic(ctx context.Context, query string, limit int) ([]
 	}
 
 	songs := make([]*media.Video, len(ids))
+	errs := make([]error, len(ids))
 	sem := make(chan struct{}, musicLookups)
 	var wg sync.WaitGroup
 	for i, id := range ids {
@@ -46,7 +49,10 @@ func (s *Searcher) SearchMusic(ctx context.Context, query string, limit int) ([]
 
 			v, err := s.lookupSong(ctx, id)
 			if err != nil {
-				slog.Debug("music search: skipping song", "id", id, "error", err)
+				errs[i] = err
+				if ctx.Err() == nil {
+					slog.Warn("music search: skipping song", "id", id, "error", err)
+				}
 				return
 			}
 			songs[i] = &v
@@ -62,6 +68,9 @@ func (s *Searcher) SearchMusic(ctx context.Context, query string, limit int) ([]
 		if v != nil {
 			videos = append(videos, *v)
 		}
+	}
+	if len(videos) == 0 && len(ids) > 0 {
+		return nil, fmt.Errorf("look up songs: %w", errors.Join(errs...))
 	}
 	return videos, nil
 }

@@ -44,6 +44,13 @@ esac`)}
 	assert.Equal(t, "Bohemian Rhapsody (feat. Sam Tsui)", got[1].Tags.Title)
 }
 
+func TestSearcher_SearchMusic_AllLookupsFail(t *testing.T) {
+	s := &Searcher{Executable: fakeExecutable(t, `
+case " $* " in *" --flat-playlist "*) printf 'a\nb\n';; *) echo 'ERROR: Sign in to confirm you are not a bot' >&2; exit 1;; esac`)}
+	_, err := s.SearchMusic(context.Background(), "q", 2)
+	assert.ErrorContains(t, err, "look up songs")
+}
+
 func TestSearcher_SearchMusic_SearchFails(t *testing.T) {
 	s := &Searcher{Executable: fakeExecutable(t, `echo 'ERROR: HTTP Error 429' >&2; exit 1`)}
 	_, err := s.SearchMusic(context.Background(), "q", 5)
