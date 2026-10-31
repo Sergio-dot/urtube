@@ -45,7 +45,7 @@ func TestNewServer(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, s)
-				t.Cleanup(func() { s.Stop(context.Background()) })
+				t.Cleanup(func() { _ = s.Stop(context.Background()) })
 			}
 		})
 	}

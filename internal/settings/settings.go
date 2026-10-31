@@ -142,17 +142,17 @@ func (s *Store) writeLocked(v saved) error {
 	}
 
 	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("save settings: %w", err)
 	}
 	tmp, err := os.CreateTemp(dir, FileName+".*")
 	if err != nil {
 		return fmt.Errorf("save settings: %w", err)
 	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after a successful rename
 
 	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the write error is the one to report
 		return fmt.Errorf("save settings: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

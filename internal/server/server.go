@@ -29,7 +29,8 @@ func NewServer(addr string, handler http.Handler) (*Server, error) {
 		return nil, ErrInvalidHandler
 	}
 
-	ln, err := net.Listen("tcp", addr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", addr)
 	if err != nil {
 		return nil, err
 	}

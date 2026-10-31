@@ -51,7 +51,7 @@ func serveUI(ui fs.FS) http.Handler {
 
 		f, err := ui.Open(path)
 		if err == nil {
-			f.Close()
+			_ = f.Close() // only opened to check it exists
 			fileServer.ServeHTTP(w, r)
 			return
 		}
