@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"sync"
 
@@ -115,15 +116,7 @@ func (s *DownloadService) dispatchLocked() {
 }
 
 func (s *DownloadService) run(j *job) {
-	err := s.fetcher.Fetch(j.ctx, j.req, j.dir, func(p Progress) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if j.state.Status != StatusDownloading {
-			return
-		}
-		j.state.Progress = p
-		s.publishLocked(j.state)
-	})
+	err := s.fetch(j)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -136,6 +129,41 @@ func (s *DownloadService) run(j *job) {
 	default:
 		s.finishLocked(j, StatusFinished, "")
 	}
+}
+
+// fetch inspects the video, settles its tags and location, and downloads it.
+func (s *DownloadService) fetch(j *job) error {
+	info, err := s.fetcher.Inspect(j.ctx, j.req.URL)
+	if err != nil {
+		return err
+	}
+
+	lib := os.DirFS(j.dir)
+	tags := j.req.Tags.Or(GuessTags(info))
+	audio := j.req.Options.Type == MediaAudio
+	if audio {
+		tags = MatchLibrary(lib, tags)
+	}
+	job := FetchJob{
+		Info:    info,
+		Options: j.req.Options,
+		Tags:    tags,
+		Dir:     j.dir,
+		Path:    PlanPath(lib, tags, j.req.Options.Type),
+		// Intros and skits in music videos are noise in a music library;
+		// in a video they're part of what was asked for.
+		TrimNonMusic: audio,
+	}
+
+	return s.fetcher.Fetch(j.ctx, job, func(p Progress) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if j.state.Status != StatusDownloading {
+			return
+		}
+		j.state.Progress = p
+		s.publishLocked(j.state)
+	})
 }
 
 // finishLocked moves j to a terminal status, frees its slot if it was running

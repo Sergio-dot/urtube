@@ -92,6 +92,7 @@ func run() error {
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Search:       media.NewSearchService(&ytdlp.Searcher{}),
 		Downloads:    downloads,
+		Suggest:      media.NewSuggestService(fetcher, store),
 		Settings:     store,
 		UI:           ui,
 		Config:       *cfg,

@@ -36,13 +36,14 @@ FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1de
 ARG YTDLP_VERSION=2026.10.26
 ARG YTDLP_SHA256=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3
 
-# ffmpeg merges and converts; python3 runs the yt-dlp zipapp; tini reaps the
-# ffmpeg processes orphaned when a cancelled download's process group is killed.
+# ffmpeg merges and converts; python3 runs the yt-dlp zipapp, and mutagen lets
+# it embed cover art in M4A and Opus files; tini reaps the ffmpeg processes
+# orphaned when a cancelled download's process group is killed.
 # Versions come from the Debian release: pinning exact ones breaks the build
 # as soon as a security update replaces them.
 # hadolint ignore=DL3008
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 tini \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-mutagen tini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deno /deno /usr/local/bin/deno

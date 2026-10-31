@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,9 +37,25 @@ func (f *fakeSearcher) Search(ctx context.Context, query string, limit int, incl
 // blockingFetcher blocks every download until its context is cancelled.
 type blockingFetcher struct{}
 
-func (blockingFetcher) Fetch(ctx context.Context, req media.Request, dir string, onProgress func(media.Progress)) error {
+func (blockingFetcher) Inspect(ctx context.Context, url string) (media.VideoInfo, error) {
+	return media.VideoInfo{Title: "Artist - Song"}, nil
+}
+
+func (blockingFetcher) Fetch(ctx context.Context, job media.FetchJob, onProgress func(media.Progress)) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// fakeSuggester returns sug (or err) and records the URL it was asked about.
+type fakeSuggester struct {
+	sug    media.Suggestion
+	err    error
+	gotURL string
+}
+
+func (f *fakeSuggester) Suggest(ctx context.Context, url string) (media.Suggestion, error) {
+	f.gotURL = url
+	return f.sug, f.err
 }
 
 // fakeSettings stores the download folder in memory. dirErr, if set, is
@@ -83,6 +100,9 @@ func newTestRouter(t *testing.T, deps Deps) http.Handler {
 	}
 	if deps.Settings == nil {
 		deps.Settings = &fakeSettings{}
+	}
+	if deps.Suggest == nil {
+		deps.Suggest = &fakeSuggester{}
 	}
 	if deps.Downloads == nil {
 		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 2)
@@ -466,5 +486,60 @@ func TestSettings(t *testing.T) {
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 		assert.Equal(t, "download folder unavailable: /downloads is not writable: permission denied", errorMessage(t, w))
+	})
+}
+
+func TestSuggestTags(t *testing.T) {
+	t.Run("returns guessed tags and known artists", func(t *testing.T) {
+		sug := &fakeSuggester{sug: media.Suggestion{
+			Tags:         media.Tags{Artist: "Queen", Title: "Bohemian Rhapsody", Album: "A Night At The Opera", Year: 1975},
+			KnownArtists: []string{"ABBA", "Queen"},
+		}}
+		h := newTestRouter(t, Deps{Suggest: sug})
+
+		w := do(h, http.MethodGet, "/api/v1/tags?url="+url.QueryEscape("https://www.youtube.com/watch?v=x&t=1"), "")
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{
+			"tags": {"artist": "Queen", "title": "Bohemian Rhapsody", "album": "A Night At The Opera", "year": 1975},
+			"knownArtists": ["ABBA", "Queen"]
+		}`, w.Body.String())
+		assert.Equal(t, "https://www.youtube.com/watch?v=x&t=1", sug.gotURL)
+	})
+
+	t.Run("no known artists is an empty list", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Suggest: &fakeSuggester{}})
+		w := do(h, http.MethodGet, "/api/v1/tags?url=https://example.com/v", "")
+		assert.Contains(t, w.Body.String(), `"knownArtists":[]`)
+	})
+
+	t.Run("unavailable videos are 502 with the reason", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Suggest: &fakeSuggester{err: fmt.Errorf("%w: Private video", media.ErrVideoUnavailable)}})
+		w := do(h, http.MethodGet, "/api/v1/tags?url=https://example.com/v", "")
+		assert.Equal(t, http.StatusBadGateway, w.Code)
+		assert.Equal(t, "could not read the video: Private video", errorMessage(t, w))
+	})
+
+	t.Run("invalid URLs are 400", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Suggest: &fakeSuggester{err: media.ErrInvalidURL}})
+		w := do(h, http.MethodGet, "/api/v1/tags?url=nope", "")
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestStartDownload_Tags(t *testing.T) {
+	t.Run("invalid tags are 400", func(t *testing.T) {
+		h := newTestRouter(t, Deps{})
+		w := do(h, http.MethodPost, "/api/v1/download",
+			`{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"a\nb"}}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "tags.artist must not contain control characters", errorMessage(t, w))
+	})
+
+	t.Run("tags are accepted", func(t *testing.T) {
+		h := newTestRouter(t, Deps{})
+		w := do(h, http.MethodPost, "/api/v1/download",
+			`{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"Queen","title":"Song","album":"","year":1975}}`)
+		assert.Equal(t, http.StatusAccepted, w.Code)
 	})
 }

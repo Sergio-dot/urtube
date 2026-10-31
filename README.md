@@ -55,6 +55,27 @@ it. The folder chosen in Settings is saved and takes precedence over
 urtube still starts: the app shows the problem and refuses downloads until it
 is fixed.
 
+**How files are organized.** Audio goes to `Artist/Album/Title.ext`, or
+`Artist/Title.ext` when the album is unknown; video is saved as `Title.ext`.
+The download dialog prefills Artist, Title and Album and lets you correct
+them (Download all uses the guesses):
+
+- YouTube Music songs come with artist, album and year.
+- Otherwise "Artist - Title" is read from the video title, dropping noise
+  such as "(Official Video)" or "[Lyrics]", or the channel name is used
+  without " - Topic", "VEVO" or "Official".
+- Featured artists ("feat.", "ft.") move into the title, so they share the
+  main artist's folder; "&" and "," are left alone (Simon & Garfunkel).
+- An existing artist or album folder that differs only by case or spacing is
+  reused, and the tags take its spelling.
+
+The tags (title, artist, album artist, album, year) and the thumbnail,
+cropped square as cover art, are embedded in the file, which is what
+Jellyfin reads; WAV can't hold cover art. Audio downloads skip segments
+SponsorBlock users marked as non-music (intros, skits), when the
+SponsorBlock API is reachable. File names avoid characters Windows and SMB
+shares reject (`AC/DC` is saved as `AC⧸DC`).
+
 **Updating yt-dlp.** YouTube changes often break older yt-dlp releases. The
 image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`.
 A daily workflow opens a pull request when a new release is out, and the

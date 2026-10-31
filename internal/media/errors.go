@@ -14,6 +14,9 @@ var (
 	// ErrDownloadDirUnavailable is returned by Start when finished downloads
 	// could not be saved, e.g. because the folder isn't writable.
 	ErrDownloadDirUnavailable = errors.New("download folder unavailable")
+	// ErrVideoUnavailable is returned when a video can't be looked up, e.g.
+	// because it is private or was removed.
+	ErrVideoUnavailable = errors.New("could not read the video")
 )
 
 // inputError is a validation error whose message is safe to show to clients.

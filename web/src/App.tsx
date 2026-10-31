@@ -9,7 +9,12 @@ import DownloadModal from "./components/DownloadModal";
 import DownloadStatusOverlay from "./components/DownloadStatusOverlay";
 import Spinner from "./components/Spinner";
 import SettingsModal from "./components/SettingsModal";
-import { isValidOptions, type DownloadOptions, type Video } from "./api";
+import {
+  isValidOptions,
+  type DownloadOptions,
+  type Tags,
+  type Video,
+} from "./api";
 import { downloadsByVideo } from "./downloads";
 import { useDownloads } from "./hooks/useDownloads";
 import { useHealth } from "./hooks/useHealth";
@@ -75,7 +80,7 @@ function App() {
     setShowSettings(true);
   }, []);
 
-  const confirmDownload = async (options: DownloadOptions) => {
+  const confirmDownload = async (options: DownloadOptions, tags?: Tags) => {
     if (!pending) return;
     setPreferences(options);
     if (pending.fromQueue) {
@@ -87,7 +92,7 @@ function App() {
     const failures: string[] = [];
     for (const video of pending.videos) {
       try {
-        await start(video, options);
+        await start(video, options, tags);
       } catch (err) {
         const reason = err instanceof Error ? err.message : "unknown error";
         failures.push(
@@ -181,6 +186,7 @@ function App() {
         onConfirm={confirmDownload}
         title={modalTitle}
         initialOptions={preferences}
+        video={pending?.videos.length === 1 ? pending.videos[0] : undefined}
       />
 
       <SettingsModal

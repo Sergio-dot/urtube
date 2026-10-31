@@ -6,6 +6,7 @@ import {
   isValidOptions,
   searchVideos,
   startDownload,
+  suggestTags,
   updateSettings,
   type Video,
 } from "./api";
@@ -161,6 +162,33 @@ describe("settings", () => {
     mockFetch(400, { error: "/x is not writable: permission denied" });
     await expect(updateSettings("/x")).rejects.toThrow(
       "/x is not writable: permission denied",
+    );
+  });
+});
+
+describe("tags", () => {
+  it("startDownload sends tags", async () => {
+    const fetchMock = mockFetch(202, { uuid: "abc" });
+    await startDownload(
+      video,
+      { type: "audio", format: "mp3" },
+      { artist: "Queen", title: "Song", album: "" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).tags).toEqual({
+      artist: "Queen",
+      title: "Song",
+      album: "",
+    });
+  });
+
+  it("suggestTags encodes the URL", async () => {
+    const fetchMock = mockFetch(200, {
+      tags: { artist: "Queen", title: "Song", album: "" },
+      knownArtists: [],
+    });
+    await suggestTags("https://www.youtube.com/watch?v=x&t=1");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/tags?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dx%26t%3D1",
     );
   });
 });

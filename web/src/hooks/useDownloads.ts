@@ -18,8 +18,8 @@ export function useDownloads() {
 
   /** Starts a download; rejects with the server's message if it refuses. */
   const start = useCallback(
-    async (video: api.Video, options: api.DownloadOptions) => {
-      const uuid = await api.startDownload(video, options);
+    async (video: api.Video, options: api.DownloadOptions, tags?: api.Tags) => {
+      const uuid = await api.startDownload(video, options, tags);
       dispatch({ type: "started", uuid, video });
     },
     [],

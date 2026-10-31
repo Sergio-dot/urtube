@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,10 +46,11 @@ type Fetcher struct {
 	TempDir string
 }
 
-// Fetch downloads req with yt-dlp. In-progress and intermediate files are
-// written to a temporary directory, removed afterwards, and only finished
-// files are moved into dir.
-func (f *Fetcher) Fetch(ctx context.Context, req media.Request, dir string, onProgress func(media.Progress)) error {
+// Fetch downloads job.Info with yt-dlp, tagged with job.Tags, to
+// job.Path inside job.Dir. In-progress and intermediate files are written to
+// a temporary directory, removed afterwards, and only finished files are
+// moved into the library.
+func (f *Fetcher) Fetch(ctx context.Context, job media.FetchJob, onProgress func(media.Progress)) error {
 	tempDir, err := os.MkdirTemp(f.TempDir, tempDirPattern)
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
@@ -55,19 +58,45 @@ func (f *Fetcher) Fetch(ctx context.Context, req media.Request, dir string, onPr
 	// Removes partial files left behind by a failed or cancelled download.
 	defer os.RemoveAll(tempDir)
 
+	// yt-dlp downloads from the info Inspect already fetched, with urtube's
+	// tags patched in, instead of looking the video up again.
+	infoFile := filepath.Join(tempDir, "info.json")
+	info, err := patchInfo(job.Info.Raw, job.Tags)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(infoFile, info, 0o600); err != nil {
+		return fmt.Errorf("write video info: %w", err)
+	}
+
+	progress := &lineWriter{onLine: func(line []byte) {
+		if p, ok := parseProgress(line); ok && onProgress != nil {
+			onProgress(p)
+		}
+	}}
+	err = f.run(ctx, f.command(job, infoFile, tempDir, job.TrimNonMusic), progress)
+	if err != nil && job.TrimNonMusic && ctx.Err() == nil && strings.Contains(err.Error(), "SponsorBlock") {
+		// Trimming is a nicety: keep the song rather than fail when the
+		// SponsorBlock API can't be reached. Files already downloaded to
+		// tempDir are reused.
+		slog.Warn("SponsorBlock unavailable, downloading without trimming", "error", err)
+		err = f.run(ctx, f.command(job, infoFile, tempDir, false), progress)
+	}
+	return err
+}
+
+// run runs cmd with stdout going to stdout, and returns yt-dlp's last ERROR
+// message if it fails, or ctx.Err() if it was cancelled.
+func (f *Fetcher) run(ctx context.Context, c *ytdlp.Command, stdout io.Writer, urls ...string) error {
 	// go-ytdlp only builds the command line: urtube runs the process itself so
 	// that cancelling also kills yt-dlp's children (see killProcessGroupOnCancel).
-	cmd := f.command(req.Options, dir, tempDir).BuildCommand(ctx, req.URL)
+	cmd := c.BuildCommand(ctx, urls...)
 	if cmd.Err != nil {
 		return fmt.Errorf("resolve yt-dlp: %w", cmd.Err)
 	}
 	killProcessGroupOnCancel(cmd)
 
-	cmd.Stdout = &lineWriter{onLine: func(line []byte) {
-		if p, ok := parseProgress(line); ok && onProgress != nil {
-			onProgress(p)
-		}
-	}}
+	cmd.Stdout = stdout
 	var lastError string
 	cmd.Stderr = &lineWriter{onLine: func(line []byte) {
 		if msg, ok := strings.CutPrefix(string(line), "ERROR: "); ok {
@@ -124,27 +153,54 @@ func newCommand(executable string) *ytdlp.Command {
 	return cmd
 }
 
-// command builds the yt-dlp command line for opts, saving into dir.
-func (f *Fetcher) command(opts media.Options, dir, tempDir string) *ytdlp.Command {
+// squareCover crops thumbnails to a centred square, the shape of album art.
+const squareCover = `ThumbnailsConvertor+ffmpeg_o:-c:v mjpeg -vf crop="'if(gt(ih,iw),iw,ih)':'if(gt(iw,ih),ih,iw)'"`
+
+// command builds the yt-dlp command line that downloads the video described
+// by infoFile as job says, trimming non-music segments if trim is set.
+func (f *Fetcher) command(job media.FetchJob, infoFile, tempDir string, trim bool) *ytdlp.Command {
 	cmd := newCommand(f.Executable).
-		Paths("home:" + dir).
+		LoadInfoJSON(infoFile).
+		Paths("home:" + job.Dir).
 		Paths("temp:" + tempDir).
 		// Must stay relative: yt-dlp ignores --paths for an absolute output template.
-		Output("%(title)s.%(ext)s").
+		Output(outputTemplate(job.Path)).
+		WindowsFilenames().
+		EmbedMetadata().
 		// One JSON progress line every 100ms on stdout, parsed by parseProgress.
 		Progress().
 		Newline().
 		ProgressDelta(0.1).
 		ProgressTemplate("download:" + progressPrefix + "%(progress)j")
 
-	switch opts.Type {
+	switch job.Options.Type {
 	case media.MediaAudio:
-		cmd.ExtractAudio().AudioFormat(opts.Format)
+		cmd.ExtractAudio().AudioFormat(job.Options.Format)
+		// WAV can't hold cover art.
+		if job.Options.Format != "wav" {
+			cmd.EmbedThumbnail().ConvertThumbnails("jpg").PostProcessorArgs(squareCover)
+		}
 	case media.MediaVideo:
-		cmd.Format("bestvideo+bestaudio/best").RecodeVideo(opts.Format)
+		cmd.Format("bestvideo+bestaudio/best").RecodeVideo(job.Options.Format)
+		// yt-dlp can't embed thumbnails in WebM.
+		if job.Options.Format != "webm" {
+			cmd.EmbedThumbnail()
+		}
 	}
-
+	if trim {
+		cmd.SponsorblockRemove("music_offtopic")
+	}
 	return cmd
+}
+
+// outputTemplate turns path components into a yt-dlp output template. The
+// components are literal text, already safe as file names (media.SafeName).
+func outputTemplate(path []string) string {
+	escaped := make([]string, len(path))
+	for i, p := range path {
+		escaped[i] = strings.ReplaceAll(p, "%", "%%")
+	}
+	return strings.Join(escaped, "/") + ".%(ext)s"
 }
 
 // progressLine is the subset of yt-dlp's progress dictionary urtube uses.
