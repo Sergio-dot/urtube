@@ -52,19 +52,26 @@ func TestValidate(t *testing.T) {
 func TestYtdlpDownloader_NewCommand(t *testing.T) {
 	d := &YtdlpDownloader{DownloadDir: "/downloads"}
 
+	t.Run("writes partial files to the temp dir, finished files to the download dir", func(t *testing.T) {
+		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}, "/tmp/urtube/download-1").
+			BuildCommand(context.Background(), "https://example.com/v").Args
+
+		assert.Subset(t, args, []string{"--paths", "home:/downloads", "--paths", "temp:/tmp/urtube/download-1"})
+		assert.Subset(t, args, []string{"--output", "%(title)s.%(ext)s"})
+	})
+
 	t.Run("audio extracts audio in the requested format", func(t *testing.T) {
-		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}).
+		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Args
 
 		assert.Contains(t, args, "--extract-audio")
 		assert.Subset(t, args, []string{"--audio-format", "mp3"})
 		assert.NotContains(t, args, "--recode-video")
-		assert.Subset(t, args, []string{"--output", "/downloads/%(title)s.%(ext)s"})
 		assert.Equal(t, "https://example.com/v", args[len(args)-1])
 	})
 
 	t.Run("video merges best streams and recodes", func(t *testing.T) {
-		args := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mkv"}).
+		args := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mkv"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Args
 
 		assert.Subset(t, args, []string{"--format", "bestvideo+bestaudio/best", "--recode-video", "mkv"})
@@ -75,7 +82,7 @@ func TestYtdlpDownloader_NewCommand(t *testing.T) {
 		t.Setenv("URTUBE_TEST_SECRET", "s3cret")
 		t.Setenv("TZ", "Europe/Rome")
 
-		env := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mp4"}).
+		env := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mp4"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Env
 
 		assert.Contains(t, env, "TZ=Europe/Rome")
@@ -116,6 +123,7 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			downloader := &YtdlpDownloader{
 				DownloadDir: t.TempDir(),
+				TempDir:     t.TempDir(),
 			}
 
 			req := &DownloadRequest{
@@ -358,5 +366,85 @@ func TestDownloadManager_Broadcast(t *testing.T) {
 			last = <-ch
 		}
 		assert.Equal(t, statusFinished, last.Status)
+	})
+}
+
+func TestDownloadManager_Drain(t *testing.T) {
+	// collect reads ch until it is closed and returns the statuses received.
+	collect := func(t *testing.T, ch chan ProgressUpdate) []string {
+		t.Helper()
+		var statuses []string
+		timeout := time.After(2 * time.Second)
+		for {
+			select {
+			case p, ok := <-ch:
+				if !ok {
+					return statuses
+				}
+				statuses = append(statuses, p.Status)
+			case <-timeout:
+				t.Fatal("timed out waiting for the channel to close")
+			}
+		}
+	}
+
+	t.Run("waits for in-flight downloads, then closes subscribers", func(t *testing.T) {
+		release := make(chan struct{})
+		manager := NewDownloadManager(&mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				<-release
+				return nil
+			},
+		})
+		ch := manager.Subscribe()
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+
+		drained := make(chan struct{})
+		go func() {
+			manager.Drain(context.Background())
+			close(drained)
+		}()
+
+		select {
+		case <-drained:
+			t.Fatal("Drain returned while a download was still running")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(release)
+		assert.Equal(t, []string{statusDownloading, statusFinished}, collect(t, ch))
+		<-drained
+	})
+
+	t.Run("cancels downloads still running at the deadline", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		})
+		ch := manager.Subscribe()
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		manager.Drain(ctx)
+
+		assert.Equal(t, []string{statusDownloading, statusCancelled}, collect(t, ch))
+	})
+
+	t.Run("rejects new downloads and subscriptions afterwards", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{})
+		manager.Drain(context.Background())
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.ErrorIs(t, err, ErrDraining)
+
+		_, ok := <-manager.Subscribe()
+		assert.False(t, ok, "Subscribe after Drain must return a closed channel")
 	})
 }

@@ -3,9 +3,11 @@ package router
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,23 +54,32 @@ func TestNewRouter_Routes(t *testing.T) {
 		Searcher: ms,
 		Manager:  mgr,
 		Config: config.Config{
-			ServerHost:     "localhost",
-			ServerPort:     "8080",
+			HTTPPort:       "8080",
 			DownloadDir:    "./downloads",
-			LogLevel:       "info",
+			LogLevel:       slog.LevelInfo,
 			JSON:           false,
 			Concise:        true,
 			RequestHeaders: true,
 		},
+		YtdlpVersion: "2026.10.01",
 	})
 
-	t.Run("GET /healthz", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	t.Run("GET /livez", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/livez", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	})
+
+	t.Run("GET /api/v1/health reports the startup version", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), `"version":"2026.10.01"`)
 	})
 
 	t.Run("GET /api/v1/search/{searchParam}", func(t *testing.T) {
@@ -110,4 +121,23 @@ func TestNewRouter_Routes(t *testing.T) {
 
 		assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 	})
+}
+
+func TestNewRouter_Readiness(t *testing.T) {
+	var ready atomic.Bool
+	ready.Store(true)
+	r := NewRouter(Dependencies{
+		Manager: download.NewDownloadManager(&mockDownloader{}),
+		Ready:   ready.Load,
+	})
+
+	probe := func() int {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		return w.Code
+	}
+
+	assert.Equal(t, http.StatusOK, probe())
+	ready.Store(false)
+	assert.Equal(t, http.StatusServiceUnavailable, probe())
 }

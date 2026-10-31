@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
@@ -46,8 +45,11 @@ type ProgressUpdate struct {
 
 // YtdlpDownloader is a downloader that uses ytdlp.
 type YtdlpDownloader struct {
-	// DownloadDir is the directory where downloads will be saved.
+	// DownloadDir is the directory where finished downloads will be saved.
 	DownloadDir string
+	// TempDir is the parent of the per-download directories that hold
+	// in-progress files. Empty uses the system default.
+	TempDir string
 }
 
 // MediaType is the kind of media a download produces.
@@ -129,14 +131,18 @@ var passthroughEnv = []string{
 }
 
 // newCommand builds the yt-dlp command for the given options, without any
-// progress handling.
-func (d *YtdlpDownloader) newCommand(opts DownloadOptions) *ytdlp.Command {
+// progress handling. In-progress and intermediate files are written to tempDir
+// and only finished files are moved into DownloadDir.
+func (d *YtdlpDownloader) newCommand(opts DownloadOptions, tempDir string) *ytdlp.Command {
 	cmd := ytdlp.New().
 		SetExecutable("yt-dlp").
 		SetEnvVarInherit(false).
 		NoUpdate().
 		Newline(). // Force progress on new lines for parsing
-		Output(filepath.Join(d.DownloadDir, "%(title)s.%(ext)s"))
+		Paths("home:" + d.DownloadDir).
+		Paths("temp:" + tempDir).
+		// Must stay relative: yt-dlp ignores --paths for an absolute output template.
+		Output("%(title)s.%(ext)s")
 
 	for _, k := range passthroughEnv {
 		if v, ok := os.LookupEnv(k); ok {
@@ -156,7 +162,14 @@ func (d *YtdlpDownloader) newCommand(opts DownloadOptions) *ytdlp.Command {
 
 // Download downloads a video using ytdlp.
 func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
-	cmd := d.newCommand(body.Options)
+	tempDir, err := os.MkdirTemp(d.TempDir, "download-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	// Removes partial files left behind by a failed or cancelled download.
+	defer os.RemoveAll(tempDir)
+
+	cmd := d.newCommand(body.Options, tempDir)
 
 	if onProgress != nil {
 		cmd.ProgressFunc(100*time.Millisecond, func(progress ytdlp.ProgressUpdate) {
@@ -172,7 +185,7 @@ func (d *YtdlpDownloader) Download(ctx context.Context, body *DownloadRequest, o
 		})
 	}
 
-	_, err := cmd.Run(ctx, body.URL)
+	_, err = cmd.Run(ctx, body.URL)
 
 	return err
 }

@@ -1,64 +1,106 @@
 package config
 
 import (
+	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewConfig(t *testing.T) {
-	cfg := NewConfig()
-	assert.NotNil(t, cfg)
+// clearEnv unsets every config key so tests see defaults or the .env file.
+func clearEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		keyHTTPHost, keyHTTPPort, keyDownloadDir, keyTempDir, keyShutdownTimeout,
+		keyLogLevel, keyLogJSON, keyLogConcise, keyLogHeaders,
+	} {
+		t.Setenv(k, "")
+	}
 }
 
 func TestLoad_Defaults(t *testing.T) {
-	// Clear relevant env vars to test defaults
-	t.Setenv("SERVER_HOST", "")
-	t.Setenv("SERVER_PORT", "")
-	t.Setenv("DOWNLOAD_DIR", "")
-	t.Setenv("LOG_LEVEL", "")
-	t.Setenv("JSON", "")
-	t.Setenv("CONCISE", "")
-	t.Setenv("REQUEST_HEADERS", "")
+	clearEnv(t)
 
 	cfg, err := Load()
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost", cfg.ServerHost)
-	assert.Equal(t, "8080", cfg.ServerPort)
+	assert.Equal(t, "", cfg.HTTPHost, "must bind all interfaces so the server is reachable from outside a container")
+	assert.Equal(t, "8080", cfg.HTTPPort)
 	assert.Equal(t, "./downloads", cfg.DownloadDir)
-	assert.Equal(t, "info", cfg.LogLevel)
+	assert.Equal(t, filepath.Join(os.TempDir(), "urtube"), cfg.TempDir)
+	assert.Equal(t, 5*time.Second, cfg.ShutdownTimeout)
+	assert.Equal(t, slog.LevelInfo, cfg.LogLevel)
 	assert.False(t, cfg.JSON)
 	assert.True(t, cfg.Concise)
 	assert.True(t, cfg.RequestHeaders)
 }
 
 func TestLoad_EnvOverrides(t *testing.T) {
-	t.Setenv("SERVER_HOST", "127.0.0.1")
-	t.Setenv("SERVER_PORT", "9090")
-	t.Setenv("DOWNLOAD_DIR", "/tmp/downloads")
-	t.Setenv("LOG_LEVEL", "debug")
-	t.Setenv("JSON", "true")
-	t.Setenv("CONCISE", "false")
-	t.Setenv("REQUEST_HEADERS", "false")
+	t.Setenv(keyHTTPHost, "127.0.0.1")
+	t.Setenv(keyHTTPPort, "9090")
+	t.Setenv(keyDownloadDir, "/srv/media/music")
+	t.Setenv(keyTempDir, "/scratch")
+	t.Setenv(keyShutdownTimeout, "1m")
+	t.Setenv(keyLogLevel, "debug")
+	t.Setenv(keyLogJSON, "true")
+	t.Setenv(keyLogConcise, "false")
+	t.Setenv(keyLogHeaders, "false")
 
 	cfg, err := Load()
 	assert.NoError(t, err)
-	assert.Equal(t, "127.0.0.1", cfg.ServerHost)
-	assert.Equal(t, "9090", cfg.ServerPort)
-	assert.Equal(t, "/tmp/downloads", cfg.DownloadDir)
-	assert.Equal(t, "debug", cfg.LogLevel)
+	assert.Equal(t, "127.0.0.1", cfg.HTTPHost)
+	assert.Equal(t, "9090", cfg.HTTPPort)
+	assert.Equal(t, "/srv/media/music", cfg.DownloadDir)
+	assert.Equal(t, "/scratch", cfg.TempDir)
+	assert.Equal(t, time.Minute, cfg.ShutdownTimeout)
+	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
 	assert.True(t, cfg.JSON)
 	assert.False(t, cfg.Concise)
 	assert.False(t, cfg.RequestHeaders)
 }
 
+func TestLoad_IgnoresLegacyKeys(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("SERVER_PORT", "7070")
+	t.Setenv("DOWNLOAD_DIR", "/legacy")
+
+	cfg, err := Load()
+	assert.NoError(t, err)
+	assert.Equal(t, "8080", cfg.HTTPPort)
+	assert.Equal(t, "./downloads", cfg.DownloadDir)
+}
+
+func TestLoad_Invalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "unknown log level", key: keyLogLevel, value: "loud"},
+		{name: "non-numeric port", key: keyHTTPPort, value: "http"},
+		{name: "port out of range", key: keyHTTPPort, value: "70000"},
+		{name: "unparsable shutdown timeout", key: keyShutdownTimeout, value: "soon"},
+		{name: "non-positive shutdown timeout", key: keyShutdownTimeout, value: "0s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearEnv(t)
+			t.Setenv(tt.key, tt.value)
+
+			_, err := Load()
+			assert.ErrorContains(t, err, tt.key)
+		})
+	}
+}
+
 func TestLoad_WithDotEnvFile(t *testing.T) {
 	// Clear env variables so they don't override the .env file
-	t.Setenv("SERVER_HOST", "")
-	t.Setenv("SERVER_PORT", "")
+	clearEnv(t)
 
-	envData := []byte("SERVER_HOST=testenvfile\nSERVER_PORT=7070\n")
+	envData := []byte("URTUBE_HTTP_HOST=testenvfile\nURTUBE_HTTP_PORT=7070\n")
 	err := os.WriteFile(".env", envData, 0644)
 	if err != nil {
 		t.Fatalf("failed to write .env: %v", err)
@@ -67,7 +109,6 @@ func TestLoad_WithDotEnvFile(t *testing.T) {
 
 	cfg, err := Load()
 	assert.NoError(t, err)
-	assert.Equal(t, "testenvfile", cfg.ServerHost)
-	assert.Equal(t, "7070", cfg.ServerPort)
+	assert.Equal(t, "testenvfile", cfg.HTTPHost)
+	assert.Equal(t, "7070", cfg.HTTPPort)
 }
-
