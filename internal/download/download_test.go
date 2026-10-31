@@ -329,3 +329,34 @@ func TestDownloadManager_CancelDownload(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+
+func TestDownloadManager_Broadcast(t *testing.T) {
+	t.Run("drops progress ticks for a full subscriber", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{})
+		ch := manager.Subscribe()
+		defer manager.Unsubscribe(ch)
+
+		for range cap(ch) + 5 {
+			manager.broadcast(ProgressUpdate{UUID: "a", Status: statusDownloading})
+		}
+
+		assert.Len(t, ch, cap(ch))
+	})
+
+	t.Run("terminal update is delivered even when the subscriber is full", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{})
+		ch := manager.Subscribe()
+		defer manager.Unsubscribe(ch)
+
+		for range cap(ch) {
+			manager.broadcast(ProgressUpdate{UUID: "a", Status: statusDownloading})
+		}
+		manager.broadcast(ProgressUpdate{UUID: "a", Status: statusFinished})
+
+		var last ProgressUpdate
+		for len(ch) > 0 {
+			last = <-ch
+		}
+		assert.Equal(t, statusFinished, last.Status)
+	})
+}
