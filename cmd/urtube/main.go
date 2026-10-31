@@ -16,6 +16,7 @@ import (
 	"github.com/Sergio-dot/urtube/internal/config"
 	"github.com/Sergio-dot/urtube/internal/health"
 	"github.com/Sergio-dot/urtube/internal/httpapi"
+	"github.com/Sergio-dot/urtube/internal/jellyfin"
 	"github.com/Sergio-dot/urtube/internal/media"
 	"github.com/Sergio-dot/urtube/internal/server"
 	"github.com/Sergio-dot/urtube/internal/settings"
@@ -67,7 +68,16 @@ func run() error {
 
 	// The download folder can be fixed from the app, so a bad one only warns:
 	// the UI stays reachable and downloads are refused until it's fixed.
-	store, err := settings.Open(cfg.DataDir, cfg.DownloadDir, cfg.DownloadRoot)
+	jellyfinURL, err := settings.ValidJellyfinURL(cfg.JellyfinURL)
+	if err != nil {
+		slog.Warn("ignoring URTUBE_JELLYFIN_URL", "error", err)
+	}
+	store, err := settings.Open(cfg.DataDir, settings.Defaults{
+		DownloadDir:    cfg.DownloadDir,
+		DownloadRoot:   cfg.DownloadRoot,
+		JellyfinURL:    jellyfinURL,
+		JellyfinAPIKey: cfg.JellyfinAPIKey,
+	})
 	if err != nil {
 		slog.Warn("could not load saved settings, using defaults", "error", err)
 	}
@@ -87,13 +97,18 @@ func run() error {
 		slog.Warn("could not remove leftover temp files", "error", err)
 	}
 	downloads := media.NewDownloadService(fetcher, store, cfg.MaxConcurrentDownloads)
+	// Does nothing until a Jellyfin URL and API key are set.
+	downloads.SetLibraryNotifier(jellyfin.Notifier{Config: store.Jellyfin})
 
 	var shuttingDown atomic.Bool
 	handler := httpapi.NewRouter(httpapi.Deps{
-		Search:       media.NewSearchService(&ytdlp.Searcher{}),
-		Downloads:    downloads,
-		Suggest:      media.NewSuggestService(fetcher, store),
-		Settings:     store,
+		Search:    media.NewSearchService(&ytdlp.Searcher{}),
+		Downloads: downloads,
+		Suggest:   media.NewSuggestService(fetcher, store),
+		Settings:  store,
+		CheckJellyfin: func(ctx context.Context, url, apiKey string) (string, error) {
+			return jellyfin.Client{URL: url, APIKey: apiKey}.Check(ctx)
+		},
 		UI:           ui,
 		Config:       *cfg,
 		YtdlpVersion: deps.YtdlpVersion,

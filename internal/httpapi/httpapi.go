@@ -47,6 +47,11 @@ type Settings interface {
 	// SetDownloadDir changes the download folder; "" restores the default.
 	// Validation errors match media.ErrInvalidInput.
 	SetDownloadDir(dir string) error
+	// Jellyfin returns the Jellyfin URL and API key, empty when unset.
+	Jellyfin() (url, apiKey string)
+	// SetJellyfin changes the Jellyfin URL and, unless apiKey is nil, the
+	// API key. Validation errors match media.ErrInvalidInput.
+	SetJellyfin(url string, apiKey *string) error
 }
 
 // Deps holds what the HTTP layer needs.
@@ -55,6 +60,9 @@ type Deps struct {
 	Downloads Downloads
 	Suggest   Suggester
 	Settings  Settings
+	// CheckJellyfin tests a Jellyfin URL and API key, describing the server
+	// or explaining what's wrong.
+	CheckJellyfin func(ctx context.Context, url, apiKey string) (string, error)
 	// UI is the built frontend, containing index.html. Nil serves 404s.
 	UI fs.FS
 	// Config configures request logging.
@@ -114,6 +122,7 @@ func newRouter(a *api) http.Handler {
 			r.Delete("/download/{id}", handle(a.cancelDownload))
 			r.Get("/settings", handle(a.getSettings))
 			r.Put("/settings", handle(a.updateSettings))
+			r.Post("/settings/jellyfin/test", handle(a.testJellyfin))
 		})
 	})
 

@@ -29,6 +29,11 @@ type Config struct {
 	// DownloadRoot, if set, is the folder every download folder must be
 	// inside, including one chosen in the app. Empty allows any folder.
 	DownloadRoot string
+	// JellyfinURL and JellyfinAPIKey, when both set, make urtube ask
+	// Jellyfin to scan its libraries after downloads; they can also be set
+	// in the app.
+	JellyfinURL    string
+	JellyfinAPIKey string
 	// DataDir holds urtube's own state, such as the settings saved from the
 	// app.
 	DataDir string
@@ -64,6 +69,8 @@ const (
 	keyTempDir         = "URTUBE_TEMP_DIR"
 	keyDataDir         = "URTUBE_DATA_DIR"
 	keyDownloadRoot    = "URTUBE_DOWNLOAD_ROOT"
+	keyJellyfinURL     = "URTUBE_JELLYFIN_URL"
+	keyJellyfinAPIKey  = "URTUBE_JELLYFIN_API_KEY" //nolint:gosec // G101: a variable name, not a credential
 	keyMaxConcurrent   = "URTUBE_MAX_CONCURRENT_DOWNLOADS"
 	keyShutdownTimeout = "URTUBE_SHUTDOWN_TIMEOUT"
 	keyLogLevel        = "URTUBE_LOG_LEVEL"
@@ -152,6 +159,8 @@ func NewConfigWithViper(v *viper.Viper) (*Config, error) {
 		TempDir:                v.GetString(keyTempDir),
 		DataDir:                v.GetString(keyDataDir),
 		DownloadRoot:           v.GetString(keyDownloadRoot),
+		JellyfinURL:            v.GetString(keyJellyfinURL),
+		JellyfinAPIKey:         v.GetString(keyJellyfinAPIKey),
 		MaxConcurrentDownloads: maxConcurrent,
 		ShutdownTimeout:        timeout,
 		LogLevel:               level,

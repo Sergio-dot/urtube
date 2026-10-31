@@ -108,9 +108,29 @@ func newVideoResponse(v media.Video) videoResponse {
 	return r
 }
 
+// settingsRequest changes the settings it includes and leaves the rest.
 type settingsRequest struct {
 	// DownloadDir is an absolute path; empty restores the default.
-	DownloadDir string `json:"downloadDir"`
+	DownloadDir *string          `json:"downloadDir,omitempty"`
+	Jellyfin    *jellyfinRequest `json:"jellyfin,omitempty"`
+}
+
+type jellyfinRequest struct {
+	URL string `json:"url"`
+	// APIKey, when present, replaces the saved key; empty clears it.
+	APIKey *string `json:"apiKey,omitempty"`
+}
+
+// jellyfinResponse never includes the API key, only whether one is set.
+type jellyfinResponse struct {
+	URL       string `json:"url"`
+	APIKeySet bool   `json:"apiKeySet"`
+	// Enabled means libraries are refreshed after downloads.
+	Enabled bool `json:"enabled"`
+}
+
+type jellyfinTestResponse struct {
+	Message string `json:"message"`
 }
 
 type settingsResponse struct {
@@ -119,7 +139,8 @@ type settingsResponse struct {
 	// DownloadRoot is the folder a download folder must be inside, if any.
 	DownloadRoot string `json:"downloadRoot,omitempty"`
 	// DownloadDirError explains why downloads can't be saved right now.
-	DownloadDirError string `json:"downloadDirError,omitempty"`
+	DownloadDirError string           `json:"downloadDirError,omitempty"`
+	Jellyfin         jellyfinResponse `json:"jellyfin"`
 }
 
 // downloadEvent is one message on the event stream. Progress values are

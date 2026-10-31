@@ -51,7 +51,7 @@ and refuses others. With `MEDIA_ROOT=/srv/media`, for example, you can switch
 between `/srv/media/jellyfin/data/music` and `/srv/media/podcasts`. Keep
 `MEDIA_ROOT` as narrow as practical: anyone who can open urtube can save into
 it. The folder chosen in Settings is saved and takes precedence over
-`LIBRARY_DIR`; **Use default** goes back to it. If the folder isn't writable,
+`LIBRARY_DIR`; **Default folder** goes back to it. If the folder isn't writable,
 urtube still starts: the app shows the problem and refuses downloads until it
 is fixed.
 
@@ -82,6 +82,15 @@ SponsorBlock users marked as non-music (intros, skits), when the
 SponsorBlock API is reachable. File names avoid characters Windows and SMB
 shares reject (`AC/DC` is saved as `AC⧸DC`).
 
+**Jellyfin.** In Settings, enter your Jellyfin server's URL and an API key
+(Jellyfin: Dashboard → API Keys), check them with **Test connection**, and
+save. urtube then asks Jellyfin to scan its libraries once a batch of
+downloads has finished, so new songs show up without waiting for the next
+scheduled scan. It's off until both are set, and failures are only logged.
+From the urtube container, Jellyfin is usually `http://<host-ip>:8096`, or
+`http://jellyfin:8096` when both containers share a Docker network. The key
+is kept in the `data` volume and never sent back to the browser.
+
 **Updating yt-dlp.** YouTube changes often break older yt-dlp releases. The
 image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`.
 A daily workflow opens a pull request when a new release is out, and the
@@ -106,6 +115,7 @@ the binary directly):
 | `URTUBE_HTTP_HOST` | *(all interfaces)* | Address to listen on |
 | `URTUBE_HTTP_PORT` | `8080` | Port to listen on |
 | `URTUBE_DOWNLOAD_DIR` | `./downloads` (`/downloads` in the image) | Default folder for finished files; a folder chosen in Settings takes precedence |
+| `URTUBE_JELLYFIN_URL` / `URTUBE_JELLYFIN_API_KEY` | *(none)* | Defaults for the Jellyfin settings; values saved in Settings take precedence |
 | `URTUBE_DOWNLOAD_ROOT` | *(none)* | If set, download folders (including one chosen in Settings) must be inside it |
 | `URTUBE_TEMP_DIR` | `$TMPDIR/urtube` (`/var/tmp/urtube` in the image) | Where in-progress downloads are written |
 | `URTUBE_DATA_DIR` | `./data` (`/data` in the image) | Where settings changed in the app are saved |

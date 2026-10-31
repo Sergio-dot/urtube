@@ -96,19 +96,59 @@ func (a *api) updateSettings(w http.ResponseWriter, r *http.Request) error {
 		return statusError{status: http.StatusBadRequest, msg: "invalid request body"}
 	}
 
-	if err := a.Settings.SetDownloadDir(strings.TrimSpace(body.DownloadDir)); err != nil {
-		return err
+	if body.DownloadDir != nil {
+		if err := a.Settings.SetDownloadDir(strings.TrimSpace(*body.DownloadDir)); err != nil {
+			return err
+		}
+	}
+	if j := body.Jellyfin; j != nil {
+		if err := a.Settings.SetJellyfin(j.URL, j.APIKey); err != nil {
+			return err
+		}
 	}
 	writeJSON(w, http.StatusOK, a.settingsResponse())
 	return nil
 }
 
+// testJellyfin handles POST /api/v1/settings/jellyfin/test: it checks a URL
+// and API key before they are saved. Without apiKey, the saved key is used.
+func (a *api) testJellyfin(w http.ResponseWriter, r *http.Request) error {
+	var body jellyfinRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return statusError{status: http.StatusBadRequest, msg: "invalid request body"}
+	}
+
+	_, key := a.Settings.Jellyfin()
+	if body.APIKey != nil {
+		key = strings.TrimSpace(*body.APIKey)
+	}
+	url := strings.TrimSpace(body.URL)
+	if url == "" || key == "" {
+		return statusError{status: http.StatusBadRequest, msg: "enter the Jellyfin URL and API key first"}
+	}
+
+	msg, err := a.CheckJellyfin(r.Context(), url, key)
+	if err != nil {
+		return statusError{status: http.StatusBadGateway, msg: err.Error()}
+	}
+	writeJSON(w, http.StatusOK, jellyfinTestResponse{Message: "Connected to " + msg})
+	return nil
+}
+
 func (a *api) settingsResponse() settingsResponse {
 	dir, err := a.Settings.DownloadDir()
+	jURL, jKey := a.Settings.Jellyfin()
 	res := settingsResponse{
 		DownloadDir:        dir,
 		DefaultDownloadDir: a.Settings.DefaultDownloadDir(),
 		DownloadRoot:       a.Settings.Root(),
+		Jellyfin: jellyfinResponse{
+			URL:       jURL,
+			APIKeySet: jKey != "",
+			Enabled:   jURL != "" && jKey != "",
+		},
 	}
 	if err != nil {
 		res.DownloadDirError = err.Error()

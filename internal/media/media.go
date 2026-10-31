@@ -198,6 +198,13 @@ type FetchJob struct {
 	TrimNonMusic bool
 }
 
+// LibraryNotifier is told when downloads have added files to the library,
+// e.g. to have a media server scan for them. Implementations decide
+// whether there is anything to do.
+type LibraryNotifier interface {
+	LibraryChanged(ctx context.Context) error
+}
+
 // Destination decides where finished downloads are saved.
 type Destination interface {
 	// DownloadDir returns the folder to save downloads to, or an error if it
