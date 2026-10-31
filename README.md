@@ -83,10 +83,10 @@ Health endpoints: `/livez` and `/readyz` (503 while shutting down). The image's
 
 ## Development
 
-Requires Go 1.25, Node.js 22, and `yt-dlp` plus `ffmpeg` on `PATH`.
+Requires Go 1.27, Node.js 22, and `yt-dlp` plus `ffmpeg` on `PATH`.
 
 ```sh
-(cd web && npm ci && npm run build)  # the Go build embeds web/dist
+(cd web && npm ci && npm run build)  # writes internal/ui/dist, which the Go build embeds
 go run ./cmd/urtube                  # http://localhost:8080
 make test                            # unit tests (skips network tests)
 ```
