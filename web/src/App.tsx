@@ -144,24 +144,6 @@ function App() {
 
   const performDownload = async (video: Video, options: DownloadOptions) => {
     try {
-      const flags: {
-        post_processing?: Record<string, string | boolean>;
-        video_format?: Record<string, string>;
-      } = {};
-      if (options.type === "audio") {
-        flags.post_processing = {
-          extract_audio: true,
-          audio_format: options.format,
-        };
-      } else {
-        flags.video_format = {
-          format: "bestvideo+bestaudio/best",
-        };
-        flags.post_processing = {
-          recode_video: options.format,
-        };
-      }
-
       const response = await fetch("/api/v1/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,7 +151,7 @@ function App() {
           url: video.url,
           videoId: video.id,
           title: video.title,
-          flags: flags,
+          options,
         }),
       });
 
