@@ -52,19 +52,26 @@ func TestValidate(t *testing.T) {
 func TestYtdlpDownloader_NewCommand(t *testing.T) {
 	d := &YtdlpDownloader{DownloadDir: "/downloads"}
 
+	t.Run("writes partial files to the temp dir, finished files to the download dir", func(t *testing.T) {
+		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}, "/tmp/urtube/download-1").
+			BuildCommand(context.Background(), "https://example.com/v").Args
+
+		assert.Subset(t, args, []string{"--paths", "home:/downloads", "--paths", "temp:/tmp/urtube/download-1"})
+		assert.Subset(t, args, []string{"--output", "%(title)s.%(ext)s"})
+	})
+
 	t.Run("audio extracts audio in the requested format", func(t *testing.T) {
-		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}).
+		args := d.newCommand(DownloadOptions{Type: MediaAudio, Format: "mp3"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Args
 
 		assert.Contains(t, args, "--extract-audio")
 		assert.Subset(t, args, []string{"--audio-format", "mp3"})
 		assert.NotContains(t, args, "--recode-video")
-		assert.Subset(t, args, []string{"--output", "/downloads/%(title)s.%(ext)s"})
 		assert.Equal(t, "https://example.com/v", args[len(args)-1])
 	})
 
 	t.Run("video merges best streams and recodes", func(t *testing.T) {
-		args := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mkv"}).
+		args := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mkv"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Args
 
 		assert.Subset(t, args, []string{"--format", "bestvideo+bestaudio/best", "--recode-video", "mkv"})
@@ -75,7 +82,7 @@ func TestYtdlpDownloader_NewCommand(t *testing.T) {
 		t.Setenv("URTUBE_TEST_SECRET", "s3cret")
 		t.Setenv("TZ", "Europe/Rome")
 
-		env := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mp4"}).
+		env := d.newCommand(DownloadOptions{Type: MediaVideo, Format: "mp4"}, "/tmp").
 			BuildCommand(context.Background(), "https://example.com/v").Env
 
 		assert.Contains(t, env, "TZ=Europe/Rome")
@@ -116,6 +123,7 @@ func TestYtdlpDownloader_Integration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			downloader := &YtdlpDownloader{
 				DownloadDir: t.TempDir(),
+				TempDir:     t.TempDir(),
 			}
 
 			req := &DownloadRequest{
