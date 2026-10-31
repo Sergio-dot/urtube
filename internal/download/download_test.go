@@ -368,3 +368,83 @@ func TestDownloadManager_Broadcast(t *testing.T) {
 		assert.Equal(t, statusFinished, last.Status)
 	})
 }
+
+func TestDownloadManager_Drain(t *testing.T) {
+	// collect reads ch until it is closed and returns the statuses received.
+	collect := func(t *testing.T, ch chan ProgressUpdate) []string {
+		t.Helper()
+		var statuses []string
+		timeout := time.After(2 * time.Second)
+		for {
+			select {
+			case p, ok := <-ch:
+				if !ok {
+					return statuses
+				}
+				statuses = append(statuses, p.Status)
+			case <-timeout:
+				t.Fatal("timed out waiting for the channel to close")
+			}
+		}
+	}
+
+	t.Run("waits for in-flight downloads, then closes subscribers", func(t *testing.T) {
+		release := make(chan struct{})
+		manager := NewDownloadManager(&mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				<-release
+				return nil
+			},
+		})
+		ch := manager.Subscribe()
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+
+		drained := make(chan struct{})
+		go func() {
+			manager.Drain(context.Background())
+			close(drained)
+		}()
+
+		select {
+		case <-drained:
+			t.Fatal("Drain returned while a download was still running")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(release)
+		assert.Equal(t, []string{statusDownloading, statusFinished}, collect(t, ch))
+		<-drained
+	})
+
+	t.Run("cancels downloads still running at the deadline", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{
+			DownloadFunc: func(ctx context.Context, body *DownloadRequest, onProgress func(ProgressUpdate)) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		})
+		ch := manager.Subscribe()
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		manager.Drain(ctx)
+
+		assert.Equal(t, []string{statusDownloading, statusCancelled}, collect(t, ch))
+	})
+
+	t.Run("rejects new downloads and subscriptions afterwards", func(t *testing.T) {
+		manager := NewDownloadManager(&mockDownloader{})
+		manager.Drain(context.Background())
+
+		_, err := manager.StartDownload(context.Background(), &DownloadRequest{URL: "test"})
+		assert.ErrorIs(t, err, ErrDraining)
+
+		_, ok := <-manager.Subscribe()
+		assert.False(t, ok, "Subscribe after Drain must return a closed channel")
+	})
+}

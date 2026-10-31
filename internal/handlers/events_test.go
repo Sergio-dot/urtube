@@ -67,3 +67,36 @@ func TestHandleEvents_StreamsUpdatesAndCancels(t *testing.T) {
 	assert.Contains(t, w.Body.String(), `data: {`)
 	assert.Contains(t, w.Body.String(), `"status":"downloading"`)
 }
+
+func TestHandleEvents_SendsKeepAlive(t *testing.T) {
+	h := &EventsHandler{Manager: download.NewDownloadManager(nil), KeepAlive: 10 * time.Millisecond}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/events", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	assert.NoError(t, h.HandleEvents(w, req))
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), ": keep-alive\n\n")
+}
+
+func TestHandleEvents_EndsWhenManagerDrains(t *testing.T) {
+	mgr := download.NewDownloadManager(nil)
+	h := &EventsHandler{Manager: mgr}
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	w := httptest.NewRecorder()
+
+	done := make(chan error, 1)
+	go func() { done <- h.HandleEvents(w, req) }()
+
+	time.Sleep(10 * time.Millisecond)
+	mgr.Drain(context.Background())
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("event stream did not end after Drain")
+	}
+}

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/Sergio-dot/urtube/internal/download"
@@ -42,6 +43,9 @@ func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) 
 	}
 
 	downloadUUID, err := h.Manager.StartDownload(r.Context(), &body)
+	if errors.Is(err, download.ErrDraining) {
+		return httputils.APIError{StatusCode: http.StatusServiceUnavailable, Message: err.Error()}
+	}
 	if err != nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "failed to download video: " + err.Error()}
 	}

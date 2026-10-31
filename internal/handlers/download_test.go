@@ -124,6 +124,24 @@ func TestDownloadMedia(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	})
 
+	t.Run("returns 503 while shutting down", func(t *testing.T) {
+		h := &DownloadHandler{Manager: &mockManager{
+			startFunc: func(ctx context.Context, req *download.DownloadRequest) (string, error) {
+				return "", download.ErrDraining
+			},
+		}}
+
+		body := `{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","options":{"type":"audio","format":"mp3"}}`
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadMedia(w, req)
+
+		apiErr, ok := err.(httputils.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
+	})
+
 	t.Run("nil manager dependency", func(t *testing.T) {
 		h := &DownloadHandler{Manager: nil}
 

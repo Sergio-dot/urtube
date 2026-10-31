@@ -2,17 +2,24 @@ package download
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
 )
 
+// ErrDraining is returned by StartDownload once the manager is shutting down.
+var ErrDraining = errors.New("server is shutting down")
+
 // DownloadManager manages video downloads and subscriptions for progress updates.
 type DownloadManager struct {
 	downloader    Downloader
 	subscribers   []chan ProgressUpdate
 	cancellations map[string]context.CancelFunc
+	inFlight      sync.WaitGroup
+	draining      bool
+	closed        bool
 	mux           sync.RWMutex
 }
 
@@ -40,6 +47,13 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 	bgCtx, cancel := context.WithCancel(context.Background())
 
 	m.mux.Lock()
+	if m.draining {
+		m.mux.Unlock()
+		cancel()
+		return "", ErrDraining
+	}
+	// Add under the lock so it cannot race with Drain's Wait.
+	m.inFlight.Add(1)
 	m.cancellations[uStr] = cancel
 	m.mux.Unlock()
 
@@ -49,6 +63,7 @@ func (m *DownloadManager) StartDownload(ctx context.Context, req *DownloadReques
 			delete(m.cancellations, uStr)
 			m.mux.Unlock()
 			cancel()
+			m.inFlight.Done()
 		}()
 
 		m.broadcast(ProgressUpdate{
@@ -107,11 +122,53 @@ func (m *DownloadManager) CancelDownload(uuid string) bool {
 	return false
 }
 
-// Subscribe returns a channel that receives progress updates for all active downloads.
+// Drain stops accepting new downloads and waits for in-flight ones to finish.
+// Downloads still running when ctx is done are cancelled. Once every download
+// has ended, all subscriber channels are closed so that long-lived event
+// streams terminate and the HTTP server can shut down.
+func (m *DownloadManager) Drain(ctx context.Context) {
+	m.mux.Lock()
+	m.draining = true
+	m.mux.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		m.inFlight.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		m.mux.RLock()
+		slog.Warn("shutdown timeout reached, cancelling downloads", "count", len(m.cancellations))
+		for _, cancel := range m.cancellations {
+			cancel()
+		}
+		m.mux.RUnlock()
+		// Cancellation kills yt-dlp, so the remaining downloads return promptly.
+		<-done
+	}
+
+	m.mux.Lock()
+	defer m.mux.Unlock()
+	for _, sub := range m.subscribers {
+		close(sub)
+	}
+	m.subscribers = nil
+	m.closed = true
+}
+
+// Subscribe returns a channel that receives progress updates for all active
+// downloads. After Drain, it returns an already closed channel.
 func (m *DownloadManager) Subscribe() chan ProgressUpdate {
 	ch := make(chan ProgressUpdate, 10)
 	m.mux.Lock()
 	defer m.mux.Unlock()
+	if m.closed {
+		close(ch)
+		return ch
+	}
 	m.subscribers = append(m.subscribers, ch)
 	return ch
 }
