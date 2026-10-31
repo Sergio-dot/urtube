@@ -74,7 +74,7 @@ the binary directly):
 | `URTUBE_MAX_CONCURRENT_DOWNLOADS` | `2` | Downloads running at once; the rest wait in a queue |
 | `URTUBE_SHUTDOWN_TIMEOUT` | `5s` | How long running downloads may continue after a stop signal |
 | `URTUBE_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
-| `URTUBE_LOG_JSON` | `false` | Log requests as JSON |
+| `URTUBE_LOG_JSON` | `false` (`true` in the image) | Log as JSON instead of text (application and request logs) |
 | `URTUBE_LOG_CONCISE` | `true` | Shorter request logs |
 | `URTUBE_LOG_REQUEST_HEADERS` | `true` | Include request headers in request logs |
 

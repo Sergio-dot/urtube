@@ -5,6 +5,7 @@ package httpapi
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -80,6 +81,9 @@ func newRouter(a *api) http.Handler {
 		Concise:        a.Config.Concise,
 		RequestHeaders: a.Config.RequestHeaders,
 	})
+	// Write request logs through the application's logger so both share one
+	// format and destination; httplog's own handler only sets the options.
+	httpLogger.Logger = slog.Default().With("component", "http")
 
 	// Probes are answered before the request logger so they don't flood the logs.
 	r.Use(middleware.Heartbeat("/livez"))

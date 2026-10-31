@@ -61,6 +61,7 @@ RUN install -d -o 1000 -g 1000 /downloads && install -d -m 1777 /data
 ENV URTUBE_DOWNLOAD_DIR=/downloads \
     URTUBE_TEMP_DIR=/var/tmp/urtube \
     URTUBE_DATA_DIR=/data \
+    URTUBE_LOG_JSON=true \
     HOME=/tmp \
     XDG_CACHE_HOME=/tmp/.cache
 

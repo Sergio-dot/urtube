@@ -48,11 +48,10 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: false,
-		Level:     cfg.LogLevel,
-	}))
-	slog.SetDefault(logger)
+	slog.SetDefault(newLogger(cfg))
+	for _, w := range cfg.Warnings {
+		slog.Warn(w)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -133,4 +132,14 @@ func run() error {
 
 	slog.Info("shutdown complete")
 	return <-serveErr
+}
+
+// newLogger returns the logger for application and request logs alike: JSON
+// for log collectors (the container image's default) or text for terminals.
+func newLogger(cfg *config.Config) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
+	if cfg.JSON {
+		return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	}
+	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }

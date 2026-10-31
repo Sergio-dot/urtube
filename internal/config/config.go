@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -42,12 +43,18 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	// LogLevel is the logging level.
 	LogLevel slog.Level
-	// JSON indicates if request logging should be in JSON format.
+	// JSON selects JSON logs instead of text, for both application and
+	// request logs.
 	JSON bool
 	// Concise indicates if request logging should be concise.
 	Concise bool
 	// RequestHeaders indicates if request headers should be logged.
 	RequestHeaders bool
+
+	// Warnings are problems found while loading that don't stop urtube,
+	// such as renamed keys. Load doesn't log them because logging isn't set
+	// up yet; the caller should.
+	Warnings []string
 }
 
 const (
@@ -95,22 +102,24 @@ func Load() (*Config, error) {
 
 	v.SetConfigFile(".env")
 	v.AutomaticEnv()
+	// The .env file is optional: containers use environment variables.
 	err := v.ReadInConfig()
+	if err != nil && !errors.As(err, &viper.ConfigFileNotFoundError{}) && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	cfg, err := NewConfigWithViper(v)
 	if err != nil {
-		if errors.As(err, &viper.ConfigFileNotFoundError{}) || errors.Is(err, os.ErrNotExist) {
-			slog.Info("no .env file found, using environment variables")
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	for old, replacement := range renamedKeys {
 		if v.IsSet(old) {
-			slog.Warn("ignoring renamed config key", "key", old, "use", replacement)
+			cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("ignoring %s: it was renamed to %s", old, replacement))
 		}
 	}
-
-	return NewConfigWithViper(v)
+	slices.Sort(cfg.Warnings) // map order is random
+	return cfg, nil
 }
 
 // NewConfigWithViper creates, validates and returns a new Config using the
