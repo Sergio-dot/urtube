@@ -1,0 +1,45 @@
+# Weekly dependency updates, one grouped pull request per ecosystem. The
+# cooldown waits a week after a release before proposing it (security
+# updates are not delayed), so short-lived bad releases are skipped.
+# yt-dlp is pinned by URL and checksum, which Dependabot can't update:
+# .github/workflows/update-ytdlp.yml handles it.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

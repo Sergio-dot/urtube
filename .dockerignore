@@ -11,7 +11,7 @@ downloads
 tmp
 web/tmp
 web/node_modules
-web/dist
+internal/ui/dist
 **/*.test
 **/*.out
 coverage.*

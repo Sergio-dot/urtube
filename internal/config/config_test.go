@@ -79,6 +79,10 @@ func TestLoad_IgnoresLegacyKeys(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "8080", cfg.HTTPPort)
 	assert.Equal(t, "./downloads", cfg.DownloadDir)
+	assert.Equal(t, []string{
+		"ignoring DOWNLOAD_DIR: it was renamed to URTUBE_DOWNLOAD_DIR",
+		"ignoring SERVER_PORT: it was renamed to URTUBE_HTTP_PORT",
+	}, cfg.Warnings)
 }
 
 func TestLoad_Invalid(t *testing.T) {

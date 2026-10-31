@@ -37,7 +37,9 @@ func CheckDependencies(ctx context.Context) (Dependencies, error) {
 	defer cancel()
 
 	var out bytes.Buffer
-	cmd := exec.CommandContext(ctx, ytdlp, "--version")
+	// The executable is whatever yt-dlp PATH resolves to, run with a fixed
+	// argument: that is the point of this check.
+	cmd := exec.CommandContext(ctx, ytdlp, "--version") //nolint:gosec // G204, see above
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
 		return Dependencies{}, fmt.Errorf("run yt-dlp --version: %w", err)
@@ -49,7 +51,9 @@ func CheckDependencies(ctx context.Context) (Dependencies, error) {
 // CheckWritableDir creates dir if needed and verifies that files can be created
 // in it, catching wrong ownership or a missing mount before any download runs.
 func CheckWritableDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// World-readable on purpose: a media server such as Jellyfin often runs as
+	// another user and must be able to read the library.
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G301, see above
 		return fmt.Errorf("cannot create %s: %w", dir, pathCause(err))
 	}
 

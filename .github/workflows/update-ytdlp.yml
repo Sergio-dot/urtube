@@ -1,0 +1,70 @@
+name: Update yt-dlp
+
+# YouTube changes often break older yt-dlp releases, so check daily and open
+# a pull request that bumps YTDLP_VERSION and YTDLP_SHA256 in the Dockerfile.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for a new release
+        id: check
+        run: |
+          current=$(sed -n 's/^ARG YTDLP_VERSION=//p' Dockerfile)
+          latest=$(gh release view --repo yt-dlp/yt-dlp --json tagName --jq .tagName)
+          echo "current=$current latest=$latest"
+          branch="deps/yt-dlp-$latest"
+          if [ "$current" = "$latest" ]; then
+            echo "Up to date."
+          elif git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "Already proposed on $branch."
+          else
+            sum=$(gh release download "$latest" --repo yt-dlp/yt-dlp --pattern SHA2-256SUMS --output - \
+              | awk '$2 == "yt-dlp" { print $1 }')
+            [ "${#sum}" -eq 64 ] || { echo "no checksum for yt-dlp in $latest"; exit 1; }
+            sed -i -e "s/^ARG YTDLP_VERSION=.*/ARG YTDLP_VERSION=$latest/" \
+                   -e "s/^ARG YTDLP_SHA256=.*/ARG YTDLP_SHA256=$sum/" Dockerfile
+            echo "version=$latest" >> "$GITHUB_OUTPUT"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pull requests opened with the workflow token don't trigger CI, so make
+      # sure the new release downloads and runs before proposing it.
+      - name: Build and check the image
+        if: steps.check.outputs.version
+        run: |
+          docker build -t urtube:update .
+          test "$(docker run --rm --entrypoint yt-dlp urtube:update --version)" = "${{ steps.check.outputs.version }}"
+
+      - name: Open a pull request
+        if: steps.check.outputs.version
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          BRANCH: ${{ steps.check.outputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git commit -am "build(deps): bump yt-dlp to $VERSION"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "build(deps): bump yt-dlp to $VERSION" \
+            --body "Release notes: https://github.com/yt-dlp/yt-dlp/releases/tag/$VERSION
+
+          The image was built and yt-dlp reported version $VERSION.
+
+          CI doesn't start on its own for pull requests opened by GitHub Actions: close and reopen this pull request to run it."

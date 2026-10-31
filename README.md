@@ -74,7 +74,7 @@ the binary directly):
 | `URTUBE_MAX_CONCURRENT_DOWNLOADS` | `2` | Downloads running at once; the rest wait in a queue |
 | `URTUBE_SHUTDOWN_TIMEOUT` | `5s` | How long running downloads may continue after a stop signal |
 | `URTUBE_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
-| `URTUBE_LOG_JSON` | `false` | Log requests as JSON |
+| `URTUBE_LOG_JSON` | `false` (`true` in the image) | Log as JSON instead of text (application and request logs) |
 | `URTUBE_LOG_CONCISE` | `true` | Shorter request logs |
 | `URTUBE_LOG_REQUEST_HEADERS` | `true` | Include request headers in request logs |
 
@@ -83,10 +83,10 @@ Health endpoints: `/livez` and `/readyz` (503 while shutting down). The image's
 
 ## Development
 
-Requires Go 1.25, Node.js 22, and `yt-dlp` plus `ffmpeg` on `PATH`.
+Requires Go 1.27, Node.js 22, and `yt-dlp` plus `ffmpeg` on `PATH`.
 
 ```sh
-(cd web && npm ci && npm run build)  # the Go build embeds web/dist
+(cd web && npm ci && npm run build)  # writes internal/ui/dist, which the Go build embeds
 go run ./cmd/urtube                  # http://localhost:8080
 make test                            # unit tests (skips network tests)
 ```

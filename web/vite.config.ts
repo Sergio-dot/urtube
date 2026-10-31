@@ -7,6 +7,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  // Embedded into the Go binary by internal/ui.
+  build: {
+    outDir: '../internal/ui/dist',
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
       '/api': 'http://localhost:8080'
