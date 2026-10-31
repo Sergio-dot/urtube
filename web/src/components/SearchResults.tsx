@@ -63,7 +63,11 @@ export default function SearchResults({
                 <h3 className="text-sm font-semibold dark:text-white line-clamp-2">
                   {video.title}
                 </h3>
-                <p className="mt-1 text-xs text-gray-400">{video.uploader}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {video.album
+                    ? `${video.uploader} · ${video.album}`
+                    : video.uploader}
+                </p>
                 <div className="flex mt-auto justify-end gap-1">
                   <DownloadButton
                     status={download?.status ?? "idle"}

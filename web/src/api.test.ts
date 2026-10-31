@@ -42,24 +42,35 @@ describe("searchVideos", () => {
       query: "a/b c",
       limit: 10,
       includeLive: true,
+      source: "videos",
     });
     expect(results).toEqual([video]);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "/api/v1/search/a%2Fb%20c?limit=10&wantLiveStreams=true",
+      "/api/v1/search/a%2Fb%20c?limit=10&wantLiveStreams=true&source=videos",
     );
   });
 
   it("resolves to no results on 404", async () => {
     mockFetch(404, { error: "no results found" });
     await expect(
-      searchVideos({ query: "x", limit: 5, includeLive: false }),
+      searchVideos({
+        query: "x",
+        limit: 5,
+        includeLive: false,
+        source: "videos",
+      }),
     ).resolves.toEqual([]);
   });
 
   it("rejects with the server's message", async () => {
     mockFetch(500, { error: "internal server error" });
     await expect(
-      searchVideos({ query: "x", limit: 5, includeLive: false }),
+      searchVideos({
+        query: "x",
+        limit: 5,
+        includeLive: false,
+        source: "videos",
+      }),
     ).rejects.toEqual(new ApiError(500, "internal server error"));
   });
 });
@@ -189,6 +200,21 @@ describe("tags", () => {
     await suggestTags("https://www.youtube.com/watch?v=x&t=1");
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/tags?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dx%26t%3D1",
+    );
+  });
+});
+
+describe("music search", () => {
+  it("sends the source", async () => {
+    const fetchMock = mockFetch(200, []);
+    await searchVideos({
+      query: "queen",
+      limit: 20,
+      includeLive: false,
+      source: "music",
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/search/queen?limit=20&wantLiveStreams=false&source=music",
     );
   });
 });

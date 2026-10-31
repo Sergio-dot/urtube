@@ -42,11 +42,13 @@ export default function DownloadModal({
   // What the user typed; untouched fields show the suggestion.
   const [edits, setEdits] = useState<Partial<Record<keyof Tags, string>>>({});
 
+  // Music search results already know their tags, so they show at once.
+  const known = suggestion?.tags ?? video?.tags;
   const tags: Tags = {
-    artist: edits.artist ?? suggestion?.tags.artist ?? "",
-    title: edits.title ?? suggestion?.tags.title ?? "",
-    album: edits.album ?? suggestion?.tags.album ?? "",
-    year: suggestion?.tags.year,
+    artist: edits.artist ?? known?.artist ?? "",
+    title: edits.title ?? known?.title ?? "",
+    album: edits.album ?? known?.album ?? "",
+    year: known?.year,
   };
 
   const handleTypeChange = (newType: MediaType) => {
@@ -158,13 +160,13 @@ export default function DownloadModal({
                           setEdits((e) => ({ ...e, [field]: value }))
                         }
                         knownArtists={suggestion?.knownArtists ?? []}
-                        loading={loading}
+                        loading={loading && !known}
                         error={error}
                       />
                       <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                         Saved as{" "}
                         <span className="font-mono">
-                          {loading && !edits.title
+                          {loading && !known && !edits.title
                             ? "…"
                             : savedAs(tags, type === "audio", format)}
                         </span>
