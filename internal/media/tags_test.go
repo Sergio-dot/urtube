@@ -33,6 +33,16 @@ func TestGuessTags(t *testing.T) {
 			want: Tags{Artist: "Queen", Title: "Under Pressure (feat. David Bowie)"},
 		},
 		{
+			name: "songwriter credits are not featured, duplicates dropped",
+			info: VideoInfo{Track: "Mashup", Artists: []string{"nimphia", "klyron", "A", "B", "C", "klyron", "A"}},
+			want: Tags{Artist: "nimphia", Title: "Mashup"},
+		},
+		{
+			name: "up to three others are featured",
+			info: VideoInfo{Track: "Song", Artists: []string{"Alex Goot", "Sam Tsui", "sam tsui", "Tyler Ward", "Kurt"}},
+			want: Tags{Artist: "Alex Goot", Title: "Song (feat. Sam Tsui, Tyler Ward, Kurt)"},
+		},
+		{
 			name: "en dash title with video noise",
 			info: VideoInfo{Title: "Queen – Bohemian Rhapsody (Official Video Remastered)", Channel: "Queen Official"},
 			want: Tags{Artist: "Queen", Title: "Bohemian Rhapsody"},
@@ -93,6 +103,13 @@ func TestGuessTags(t *testing.T) {
 			assert.Equal(t, tt.want, GuessTags(tt.info))
 		})
 	}
+}
+
+func TestArtistCredit(t *testing.T) {
+	assert.Equal(t, "Queen", ArtistCredit([]string{"Queen"}))
+	assert.Equal(t, "A, B, C, D", ArtistCredit([]string{"A", "B", "C", "D"}))
+	assert.Equal(t, "A, B, C and 3 more", ArtistCredit([]string{"A", "B", "C", "D", "E", "F", "a"}))
+	assert.Equal(t, "", ArtistCredit(nil))
 }
 
 func TestTags(t *testing.T) {

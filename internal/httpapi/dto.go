@@ -80,6 +80,10 @@ type videoResponse struct {
 	Thumbnails []thumbnailResponse `json:"thumbnails"`
 	URL        string              `json:"url"`
 	IsLive     bool                `json:"isLive"`
+	Album      string              `json:"album,omitempty"`
+	// Tags are known for music results; the download dialog starts from
+	// them.
+	Tags *tagsDTO `json:"tags,omitempty"`
 }
 
 func newVideoResponse(v media.Video) videoResponse {
@@ -87,7 +91,7 @@ func newVideoResponse(v media.Video) videoResponse {
 	for _, t := range v.Thumbnails {
 		thumbnails = append(thumbnails, thumbnailResponse(t))
 	}
-	return videoResponse{
+	r := videoResponse{
 		ID:         v.ID,
 		Title:      v.Title,
 		Uploader:   v.Uploader,
@@ -95,7 +99,13 @@ func newVideoResponse(v media.Video) videoResponse {
 		Thumbnails: thumbnails,
 		URL:        v.URL,
 		IsLive:     v.IsLive,
+		Album:      v.Album,
 	}
+	if v.Tags != nil {
+		t := newTagsDTO(*v.Tags)
+		r.Tags = &t
+	}
+	return r
 }
 
 type settingsRequest struct {

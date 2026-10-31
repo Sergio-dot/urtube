@@ -16,7 +16,17 @@ export interface Video {
   thumbnails: Thumbnail[];
   url: string;
   isLive: boolean;
+  /** Set for music results whose album is known. */
+  album?: string;
+  /** The tags a download would use, known for music results. */
+  tags?: Tags;
 }
+
+/** Where a search looks: regular YouTube or YouTube Music songs. */
+export type SearchSource = "videos" | "music";
+
+/** Music searches look each song up, so they return at most this many. */
+export const MAX_MUSIC_RESULTS = 20;
 
 export type MediaType = "video" | "audio";
 
@@ -124,16 +134,18 @@ export interface SearchParams {
   query: string;
   limit: number;
   includeLive: boolean;
+  source: SearchSource;
 }
 
 /** Searches YouTube. A search without matches resolves to an empty list. */
 export async function searchVideos(
-  { query, limit, includeLive }: SearchParams,
+  { query, limit, includeLive, source }: SearchParams,
   signal?: AbortSignal,
 ): Promise<Video[]> {
   const params = new URLSearchParams({
     limit: String(limit),
     wantLiveStreams: String(includeLive),
+    source,
   });
   try {
     return await request<Video[]>(

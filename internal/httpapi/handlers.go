@@ -6,16 +6,23 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sergio-dot/urtube/internal/media"
 	"github.com/go-chi/chi/v5"
 )
 
-// search handles GET /api/v1/search/{query}?limit=&wantLiveStreams=.
+// search handles GET /api/v1/search/{query}?limit=&wantLiveStreams=&source=.
 // Defaults and caps for limit are the search service's business.
 func (a *api) search(w http.ResponseWriter, r *http.Request) error {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	includeLive, _ := strconv.ParseBool(r.URL.Query().Get("wantLiveStreams"))
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	includeLive, _ := strconv.ParseBool(q.Get("wantLiveStreams"))
 
-	videos, err := a.Search.Search(r.Context(), chi.URLParam(r, "query"), limit, includeLive)
+	videos, err := a.Search.Search(r.Context(), media.SearchQuery{
+		Text:        chi.URLParam(r, "query"),
+		Limit:       limit,
+		IncludeLive: includeLive,
+		Source:      media.SearchSource(q.Get("source")),
+	})
 	if err != nil {
 		return err
 	}

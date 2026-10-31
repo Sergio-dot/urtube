@@ -24,13 +24,14 @@ type fakeSearcher struct {
 	videos []media.Video
 	err    error
 
-	gotQuery string
-	gotLimit int
-	gotLive  bool
+	gotQuery  string
+	gotLimit  int
+	gotLive   bool
+	gotSource media.SearchSource
 }
 
-func (f *fakeSearcher) Search(ctx context.Context, query string, limit int, includeLive bool) ([]media.Video, error) {
-	f.gotQuery, f.gotLimit, f.gotLive = query, limit, includeLive
+func (f *fakeSearcher) Search(ctx context.Context, q media.SearchQuery) ([]media.Video, error) {
+	f.gotQuery, f.gotLimit, f.gotLive, f.gotSource = q.Text, q.Limit, q.IncludeLive, q.Source
 	return f.videos, f.err
 }
 
@@ -542,4 +543,30 @@ func TestStartDownload_Tags(t *testing.T) {
 			`{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"Queen","title":"Song","album":"","year":1975}}`)
 		assert.Equal(t, http.StatusAccepted, w.Code)
 	})
+}
+
+func TestSearch_Music(t *testing.T) {
+	search := &fakeSearcher{videos: []media.Video{{
+		ID: "a1", Title: "Bohemian Rhapsody", Uploader: "Queen", URL: "https://music.youtube.com/watch?v=a1",
+		Album: "A Night At The Opera",
+		Tags:  &media.Tags{Artist: "Queen", Title: "Bohemian Rhapsody", Album: "A Night At The Opera", Year: 1975},
+	}}}
+	h := newTestRouter(t, Deps{Search: search})
+
+	w := do(h, http.MethodGet, "/api/v1/search/bohemian?source=music&limit=10", "")
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, media.SourceMusic, search.gotSource)
+	assert.JSONEq(t, `[{
+		"id": "a1", "title": "Bohemian Rhapsody", "uploader": "Queen", "duration": 0, "thumbnails": [],
+		"url": "https://music.youtube.com/watch?v=a1", "isLive": false, "album": "A Night At The Opera",
+		"tags": {"artist": "Queen", "title": "Bohemian Rhapsody", "album": "A Night At The Opera", "year": 1975}
+	}]`, w.Body.String())
+}
+
+func TestSearch_SourceFailure(t *testing.T) {
+	h := newTestRouter(t, Deps{Search: &fakeSearcher{err: fmt.Errorf("%w: Sign in to confirm you’re not a bot.", media.ErrSearchFailed)}})
+	w := do(h, http.MethodGet, "/api/v1/search/q?source=music", "")
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Equal(t, "search failed: Sign in to confirm you’re not a bot.", errorMessage(t, w))
 }

@@ -18,7 +18,7 @@ import (
 
 // Searcher finds videos. *media.SearchService implements it.
 type Searcher interface {
-	Search(ctx context.Context, query string, limit int, includeLive bool) ([]media.Video, error)
+	Search(ctx context.Context, q media.SearchQuery) ([]media.Video, error)
 }
 
 // Downloads starts, cancels and reports downloads. *media.DownloadService

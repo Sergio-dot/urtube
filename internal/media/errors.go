@@ -17,6 +17,9 @@ var (
 	// ErrVideoUnavailable is returned when a video can't be looked up, e.g.
 	// because it is private or was removed.
 	ErrVideoUnavailable = errors.New("could not read the video")
+	// ErrSearchFailed is returned when the source refused or failed a
+	// search, e.g. YouTube asking to confirm the client isn't a bot.
+	ErrSearchFailed = errors.New("search failed")
 )
 
 // inputError is a validation error whose message is safe to show to clients.
@@ -37,4 +40,5 @@ var (
 	ErrInvalidURL       error = inputError("url must be an absolute http or https URL")
 	ErrInvalidMediaType error = inputError("options.type must be one of: video, audio")
 	ErrInvalidFormat    error = inputError("unsupported format")
+	ErrInvalidSource    error = inputError("source must be one of: videos, music")
 )

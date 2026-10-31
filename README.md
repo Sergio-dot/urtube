@@ -55,6 +55,12 @@ it. The folder chosen in Settings is saved and takes precedence over
 urtube still starts: the app shows the problem and refuses downloads until it
 is fixed.
 
+**Music search.** Next to the search box, *Videos* searches regular YouTube
+and *Music* searches YouTube Music songs. Songs come with artist, album and
+year, so their tags are right without editing; results show artist and
+album. Music searches look each song up and take a few seconds (at most 20
+results).
+
 **How files are organized.** Audio goes to `Artist/Album/Title.ext`, or
 `Artist/Title.ext` when the album is unknown; video is saved as `Title.ext`.
 The download dialog prefills Artist, Title and Album and lets you correct

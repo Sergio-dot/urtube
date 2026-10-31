@@ -35,7 +35,10 @@ func (s *Searcher) Search(ctx context.Context, query string, limit int, includeL
 
 	result, err := cmd.Run(ctx, fmt.Sprintf("ytsearch%d:%s", fetchLimit, query))
 	if err != nil {
-		return nil, fmt.Errorf("run yt-dlp search: %w", err)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %s", media.ErrSearchFailed, errorMessage(err))
 	}
 
 	infos, err := result.GetExtractedInfo()

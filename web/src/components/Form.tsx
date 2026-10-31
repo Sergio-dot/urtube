@@ -7,7 +7,13 @@ import {
 } from "@headlessui/react";
 import { MagnifyingGlassIcon, CheckIcon } from "@heroicons/react/20/solid";
 import { ChevronUpDownIcon } from "@heroicons/react/16/solid";
-import type { Health, SearchParams } from "../api";
+import {
+  MAX_MUSIC_RESULTS,
+  type Health,
+  type SearchParams,
+  type SearchSource,
+} from "../api";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 
 interface FormProps {
   onSearch: (params: SearchParams) => void;
@@ -28,6 +34,14 @@ const limitOptions: LimitOption[] = [5, 10, 15, 20, 50].map((value) => ({
   value,
 }));
 
+const sources: { value: SearchSource; label: string }[] = [
+  { value: "videos", label: "Videos" },
+  { value: "music", label: "Music" },
+];
+
+const isSearchSource = (v: unknown): v is SearchSource =>
+  v === "videos" || v === "music";
+
 export default function Form({
   onSearch,
   health,
@@ -37,11 +51,30 @@ export default function Form({
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(limitOptions[0]);
   const [includeLive, setIncludeLive] = useState(false);
+  const [source, setSource] = useLocalStorage<SearchSource>(
+    "urtube_search_source",
+    "videos",
+    isSearchSource,
+  );
+
+  const music = source === "music";
+  const options = music
+    ? limitOptions.filter((o) => o.value <= MAX_MUSIC_RESULTS)
+    : limitOptions;
+  // A limit too high for music shows (and searches) as the music maximum.
+  const effectiveLimit = options.includes(limit) ? limit : options.at(-1)!;
 
   const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
     const trimmed = query.trim();
-    if (trimmed) onSearch({ query: trimmed, limit: limit.value, includeLive });
+    if (trimmed) {
+      onSearch({
+        query: trimmed,
+        limit: effectiveLimit.value,
+        includeLive: !music && includeLive,
+        source,
+      });
+    }
   };
 
   const [statusColor, statusText] =
@@ -89,43 +122,73 @@ export default function Form({
 
             <div className="w-40 shrink-0">
               <SelectMenu
-                options={limitOptions}
-                selected={limit}
+                options={options}
+                selected={effectiveLimit}
                 onChange={setLimit}
               />
             </div>
           </div>
 
-          {/* Row 2: checkbox + submit button */}
-          <div className="flex items-center justify-between gap-x-4">
-            <label className="flex cursor-pointer items-center gap-x-3 select-none">
-              <div className="group grid size-4 grid-cols-1 shrink-0">
-                <input
-                  id="includeLive"
-                  name="includeLive"
-                  type="checkbox"
-                  checked={includeLive}
-                  onChange={(e) => setIncludeLive(e.target.checked)}
-                  className="col-start-1 row-start-1 appearance-none rounded-sm border border-gray-300 bg-white checked:border-indigo-500 checked:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/10 dark:bg-white/5 dark:checked:border-indigo-500 dark:checked:bg-indigo-500"
-                />
-                <svg
-                  fill="none"
-                  viewBox="0 0 14 14"
-                  className="pointer-events-none col-start-1 row-start-1 size-3.5 self-center justify-self-center stroke-white group-has-disabled:stroke-white/25"
-                >
-                  <path
-                    d="M3 8L6 11L11 3.5"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="opacity-0 group-has-checked:opacity-100"
-                  />
-                </svg>
+          {/* Row 2: source, live streams, submit */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div
+                role="radiogroup"
+                aria-label="Search in"
+                className="inline-flex rounded-xl bg-gray-100 p-1 dark:bg-white/5"
+              >
+                {sources.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={source === value}
+                    onClick={() => setSource(value)}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                      source === value
+                        ? "bg-white text-gray-900 shadow-sm dark:bg-indigo-500 dark:text-white"
+                        : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-              <span className="text-sm font-medium text-gray-700 dark:text-white">
-                Include live streams
-              </span>
-            </label>
+              {music ? (
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Songs with artist and album
+                </span>
+              ) : (
+                <label className="flex cursor-pointer items-center gap-x-3 select-none">
+                  <div className="group grid size-4 grid-cols-1 shrink-0">
+                    <input
+                      id="includeLive"
+                      name="includeLive"
+                      type="checkbox"
+                      checked={includeLive}
+                      onChange={(e) => setIncludeLive(e.target.checked)}
+                      className="col-start-1 row-start-1 appearance-none rounded-sm border border-gray-300 bg-white checked:border-indigo-500 checked:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/10 dark:bg-white/5 dark:checked:border-indigo-500 dark:checked:bg-indigo-500"
+                    />
+                    <svg
+                      fill="none"
+                      viewBox="0 0 14 14"
+                      className="pointer-events-none col-start-1 row-start-1 size-3.5 self-center justify-self-center stroke-white group-has-disabled:stroke-white/25"
+                    >
+                      <path
+                        d="M3 8L6 11L11 3.5"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-0 group-has-checked:opacity-100"
+                      />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-white">
+                    Include live streams
+                  </span>
+                </label>
+              )}
+            </div>
 
             <button
               type="submit"
