@@ -23,8 +23,18 @@ meant for one household: one instance, no accounts.
 3. Start it and open `http://<host>:8080`:
 
    ```sh
-   docker compose up -d --build
+   docker compose up -d
    ```
+
+This runs the published image, `ghcr.io/sergio-dot/urtube`, built for amd64
+and arm64 by CI from `main`. Tags:
+- `latest`: the newest build of main.
+- `sha-<commit>`: one specific build, to pin or roll back with
+  `IMAGE_TAG=sha-1a2b3c4` in `.env`.
+- `1.2.3` / `1.2`: releases, once `v*` tags are pushed.
+
+Update with `docker compose pull && docker compose up -d`. To run your own
+changes instead, build locally with `docker compose up -d --build`.
 
 The container runs as `PUID:PGID` with a read-only root filesystem and no
 capabilities. Settings changed in the app are kept in the `data` volume.
@@ -46,9 +56,10 @@ urtube still starts: the app shows the problem and refuses downloads until it
 is fixed.
 
 **Updating yt-dlp.** YouTube changes often break older yt-dlp releases. The
-image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`;
-take the new checksum from the `yt-dlp` line of the release's `SHA2-256SUMS`
-and rebuild. To try a release without editing the file:
+image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`.
+A daily workflow opens a pull request when a new release is out, and the
+image is republished once it is merged; then `docker compose pull`. To try a
+release locally without editing the file:
 
 ```sh
 docker compose build --build-arg YTDLP_VERSION=<version> --build-arg YTDLP_SHA256=<sha256>
