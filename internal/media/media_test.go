@@ -100,23 +100,29 @@ func TestSearchService(t *testing.T) {
 	})
 }
 
-// fakeFetcher runs fetch for every Fetch call and records the folders it was
-// asked to download into.
+// fakeFetcher returns info (or inspectErr) from Inspect, runs fetch for
+// every Fetch call and records the jobs it was given.
 type fakeFetcher struct {
-	fetch func(ctx context.Context, req Request, onProgress func(Progress)) error
+	info       VideoInfo
+	inspectErr error
+	fetch      func(ctx context.Context, job FetchJob, onProgress func(Progress)) error
 
 	mu   sync.Mutex
-	dirs []string
+	jobs []FetchJob
 }
 
-func (f *fakeFetcher) Fetch(ctx context.Context, req Request, dir string, onProgress func(Progress)) error {
+func (f *fakeFetcher) Inspect(ctx context.Context, url string) (VideoInfo, error) {
+	return f.info, f.inspectErr
+}
+
+func (f *fakeFetcher) Fetch(ctx context.Context, job FetchJob, onProgress func(Progress)) error {
 	f.mu.Lock()
-	f.dirs = append(f.dirs, dir)
+	f.jobs = append(f.jobs, job)
 	f.mu.Unlock()
 	if f.fetch == nil {
 		return nil
 	}
-	return f.fetch(ctx, req, onProgress)
+	return f.fetch(ctx, job, onProgress)
 }
 
 // fixedDir is a Destination that always returns dir, or err if set.
@@ -132,7 +138,7 @@ var testDest = fixedDir{dir: "/library"}
 // blockingFetcher returns a fetcher that blocks until release is closed or
 // its context is cancelled.
 func blockingFetcher(release <-chan struct{}) *fakeFetcher {
-	return &fakeFetcher{fetch: func(ctx context.Context, req Request, onProgress func(Progress)) error {
+	return &fakeFetcher{fetch: func(ctx context.Context, job FetchJob, onProgress func(Progress)) error {
 		select {
 		case <-release:
 			return nil
@@ -209,7 +215,9 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		assert.Equal(t, []string{"/library"}, f.dirs)
+		if assert.Len(t, f.jobs, 1) {
+			assert.Equal(t, "/library", f.jobs[0].Dir)
+		}
 	})
 
 	t.Run("rejects invalid requests", func(t *testing.T) {
@@ -219,7 +227,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 	})
 
 	t.Run("successful download reports progress and finishes", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, req Request, onProgress func(Progress)) error {
+		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, job FetchJob, onProgress func(Progress)) error {
 			onProgress(Progress{DownloadedBytes: 50, TotalBytes: 100})
 			return nil
 		}}, testDest, 1)
@@ -248,7 +256,7 @@ func TestDownloadService_Lifecycle(t *testing.T) {
 	})
 
 	t.Run("failed download reports the error", func(t *testing.T) {
-		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, req Request, onProgress func(Progress)) error {
+		svc := NewDownloadService(&fakeFetcher{fetch: func(ctx context.Context, job FetchJob, onProgress func(Progress)) error {
 			return errors.New("HTTP Error 403: Forbidden")
 		}}, testDest, 1)
 		_, updates, unsubscribe := svc.Subscribe()

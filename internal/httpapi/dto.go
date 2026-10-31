@@ -14,6 +14,22 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// tagsDTO describes a song. On requests, empty fields are guessed.
+type tagsDTO struct {
+	Artist string `json:"artist"`
+	Title  string `json:"title"`
+	Album  string `json:"album"`
+	Year   int    `json:"year,omitempty"`
+}
+
+func (t tagsDTO) toMedia() media.Tags {
+	return media.Tags{Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year}
+}
+
+func newTagsDTO(t media.Tags) tagsDTO {
+	return tagsDTO{Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year}
+}
+
 type downloadRequest struct {
 	URL     string `json:"url"`
 	VideoID string `json:"videoId,omitempty"`
@@ -22,15 +38,26 @@ type downloadRequest struct {
 		Type   string `json:"type"`
 		Format string `json:"format"`
 	} `json:"options"`
+	Tags *tagsDTO `json:"tags,omitempty"`
 }
 
 func (d downloadRequest) toMedia() media.Request {
-	return media.Request{
+	r := media.Request{
 		URL:     d.URL,
 		VideoID: d.VideoID,
 		Title:   d.Title,
 		Options: media.Options{Type: media.MediaType(d.Options.Type), Format: d.Options.Format},
 	}
+	if d.Tags != nil {
+		r.Tags = d.Tags.toMedia()
+	}
+	return r
+}
+
+type suggestionResponse struct {
+	Tags tagsDTO `json:"tags"`
+	// KnownArtists are the artist folders already in the library.
+	KnownArtists []string `json:"knownArtists"`
 }
 
 type downloadResponse struct {

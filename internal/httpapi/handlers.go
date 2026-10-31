@@ -28,6 +28,21 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// suggestTags handles GET /api/v1/tags?url=, the tags urtube would use for
+// a download, for the user to check before starting it.
+func (a *api) suggestTags(w http.ResponseWriter, r *http.Request) error {
+	sug, err := a.Suggest.Suggest(r.Context(), r.URL.Query().Get("url"))
+	if err != nil {
+		return err
+	}
+	known := sug.KnownArtists
+	if known == nil {
+		known = []string{}
+	}
+	writeJSON(w, http.StatusOK, suggestionResponse{Tags: newTagsDTO(sug.Tags), KnownArtists: known})
+	return nil
+}
+
 // startDownload handles POST /api/v1/download.
 func (a *api) startDownload(w http.ResponseWriter, r *http.Request) error {
 	var body downloadRequest

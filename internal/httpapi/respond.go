@@ -48,6 +48,9 @@ func errorStatus(err error) (int, string) {
 		return http.StatusNotFound, err.Error()
 	case errors.Is(err, media.ErrDraining), errors.Is(err, media.ErrDownloadDirUnavailable):
 		return http.StatusServiceUnavailable, err.Error()
+	case errors.Is(err, media.ErrVideoUnavailable):
+		// The message is yt-dlp's explanation, e.g. "Private video".
+		return http.StatusBadGateway, err.Error()
 	default:
 		return http.StatusInternalServerError, "internal server error"
 	}

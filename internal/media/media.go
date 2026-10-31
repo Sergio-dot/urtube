@@ -76,21 +76,35 @@ type Request struct {
 	Title   string
 	// Options describes the desired output.
 	Options Options
+	// Tags are the client's corrections; empty fields are guessed from the
+	// video when the download starts.
+	Tags Tags
 }
 
 // Validate checks that the URL is an absolute http(s) URL and the options are
 // allowed.
 func (r Request) Validate() error {
-	if strings.TrimSpace(r.URL) == "" {
+	if err := validateURL(r.URL); err != nil {
+		return err
+	}
+	if err := r.Options.Validate(); err != nil {
+		return err
+	}
+	return r.Tags.Validate()
+}
+
+// validateURL accepts absolute http(s) URLs only. Sources pass the URL to a
+// command line, so requiring the scheme also keeps it from being read as a
+// flag.
+func validateURL(raw string) error {
+	if strings.TrimSpace(raw) == "" {
 		return ErrURLRequired
 	}
-	// Fetchers pass the URL to a command line, so requiring an http(s) scheme
-	// also keeps it from being parsed as a flag.
-	u, err := url.Parse(r.URL)
+	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return ErrInvalidURL
 	}
-	return r.Options.Validate()
+	return nil
 }
 
 // Status is the lifecycle state of a download.
@@ -146,11 +160,34 @@ type VideoSource interface {
 	Search(ctx context.Context, query string, limit int, includeLive bool) ([]Video, error)
 }
 
+// Inspector looks up a video without downloading it.
+type Inspector interface {
+	// Inspect returns what the source knows about the video at url.
+	Inspect(ctx context.Context, url string) (VideoInfo, error)
+}
+
 // Fetcher downloads a single video to storage.
 type Fetcher interface {
-	// Fetch downloads the requested video into dir, reporting progress
-	// through onProgress, until it completes or ctx is cancelled.
-	Fetch(ctx context.Context, req Request, dir string, onProgress func(Progress)) error
+	Inspector
+	// Fetch carries out job, reporting progress through onProgress, until
+	// it completes or ctx is cancelled.
+	Fetch(ctx context.Context, job FetchJob, onProgress func(Progress)) error
+}
+
+// FetchJob is a download with every decision made: what to fetch, how to
+// tag it and where to save it.
+type FetchJob struct {
+	// Info comes from Inspector.Inspect for the requested URL.
+	Info    VideoInfo
+	Options Options
+	Tags    Tags
+	// Dir is the library folder; Path is the file's location inside it,
+	// as path components without the extension (see PlanPath).
+	Dir  string
+	Path []string
+	// TrimNonMusic asks to cut segments marked as non-music, if the source
+	// knows any.
+	TrimNonMusic bool
 }
 
 // Destination decides where finished downloads are saved.

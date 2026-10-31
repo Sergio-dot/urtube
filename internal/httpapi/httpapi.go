@@ -29,6 +29,12 @@ type Downloads interface {
 	Subscribe() (active []media.Download, updates <-chan media.Download, unsubscribe func())
 }
 
+// Suggester suggests tags for a video before it is downloaded.
+// *media.SuggestService implements it.
+type Suggester interface {
+	Suggest(ctx context.Context, url string) (media.Suggestion, error)
+}
+
 // Settings reads and changes the settings users edit in the app.
 // *settings.Store implements it.
 type Settings interface {
@@ -47,6 +53,7 @@ type Settings interface {
 type Deps struct {
 	Search    Searcher
 	Downloads Downloads
+	Suggest   Suggester
 	Settings  Settings
 	// UI is the built frontend, containing index.html. Nil serves 404s.
 	UI fs.FS
@@ -102,6 +109,7 @@ func newRouter(a *api) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(requestTimeout))
 			r.Get("/search/{query}", handle(a.search))
+			r.Get("/tags", handle(a.suggestTags))
 			r.Post("/download", handle(a.startDownload))
 			r.Delete("/download/{id}", handle(a.cancelDownload))
 			r.Get("/settings", handle(a.getSettings))
