@@ -25,6 +25,15 @@ updates:
       npm:
         patterns: ["*"]
         update-types: [minor, patch]
+    ignore:
+      # The types must match the Node.js version that builds the frontend
+      # (22, as in ci.yml and the Dockerfile).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint 8 doesn't accept TypeScript 7 as a peer dependency
+      # yet, so npm ci fails. Remove once it does.
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: docker
     directory: /
@@ -33,6 +42,11 @@ updates:
     groups:
       base-images:
         patterns: ["*"]
+    ignore:
+      # Node.js majors change deliberately, from one LTS line to the next and
+      # together with ci.yml; odd-numbered releases are short-lived.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
