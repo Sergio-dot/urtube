@@ -1,0 +1,134 @@
+package httpapi
+
+import (
+	"fmt"
+
+	"github.com/Sergio-dot/urtube/internal/media"
+)
+
+// The types in this file define the JSON contract with the frontend
+// (web/src/types.ts). Keep the two in sync.
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+type downloadRequest struct {
+	URL     string `json:"url"`
+	VideoID string `json:"videoId,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Options struct {
+		Type   string `json:"type"`
+		Format string `json:"format"`
+	} `json:"options"`
+}
+
+func (d downloadRequest) toMedia() media.Request {
+	return media.Request{
+		URL:     d.URL,
+		VideoID: d.VideoID,
+		Title:   d.Title,
+		Options: media.Options{Type: media.MediaType(d.Options.Type), Format: d.Options.Format},
+	}
+}
+
+type downloadResponse struct {
+	UUID    string `json:"uuid"`
+	Message string `json:"message"`
+}
+
+type thumbnailResponse struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+}
+
+type videoResponse struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Uploader string `json:"uploader"`
+	// Duration is in whole seconds; zero for live streams.
+	Duration   int                 `json:"duration"`
+	Thumbnails []thumbnailResponse `json:"thumbnails"`
+	URL        string              `json:"url"`
+	IsLive     bool                `json:"isLive"`
+}
+
+func newVideoResponse(v media.Video) videoResponse {
+	thumbnails := make([]thumbnailResponse, 0, len(v.Thumbnails))
+	for _, t := range v.Thumbnails {
+		thumbnails = append(thumbnails, thumbnailResponse(t))
+	}
+	return videoResponse{
+		ID:         v.ID,
+		Title:      v.Title,
+		Uploader:   v.Uploader,
+		Duration:   int(v.Duration.Seconds()),
+		Thumbnails: thumbnails,
+		URL:        v.URL,
+		IsLive:     v.IsLive,
+	}
+}
+
+// downloadEvent is one message on the event stream. Progress values are
+// preformatted for display and empty when unknown.
+type downloadEvent struct {
+	UUID         string `json:"uuid"`
+	VideoID      string `json:"videoId"`
+	Title        string `json:"title"`
+	Status       string `json:"status"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	Percent      string `json:"percent"`
+	Speed        string `json:"speed"`
+	ETA          string `json:"eta"`
+	Downloaded   string `json:"downloaded"`
+	Total        string `json:"total"`
+}
+
+func newDownloadEvent(d media.Download) downloadEvent {
+	e := downloadEvent{
+		UUID:         d.ID,
+		VideoID:      d.VideoID,
+		Title:        d.Title,
+		Status:       string(d.Status),
+		ErrorMessage: d.Error,
+	}
+
+	p := d.Progress
+	switch {
+	case d.Status == media.StatusFinished:
+		e.Percent = "100%"
+	case p.TotalBytes > 0:
+		e.Percent = fmt.Sprintf("%.2f%%", p.Percent())
+	}
+	if p.BytesPerSecond > 0 {
+		e.Speed = formatBytes(int64(p.BytesPerSecond)) + "/s"
+	}
+	if p.ETA > 0 {
+		e.ETA = p.ETA.String()
+	}
+	if p.DownloadedBytes > 0 {
+		e.Downloaded = formatBytes(p.DownloadedBytes)
+	}
+	if p.TotalBytes > 0 {
+		e.Total = formatBytes(p.TotalBytes)
+	}
+	return e
+}
+
+// formatBytes formats b with binary units, e.g. "5.0 MiB".
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < 0 {
+		return "0 B"
+	}
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}

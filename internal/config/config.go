@@ -27,6 +27,9 @@ type Config struct {
 	// TempDir is where in-progress downloads are written before being moved to
 	// DownloadDir, so partial files never appear in a watched media library.
 	TempDir string
+	// MaxConcurrentDownloads is how many downloads run at once; the rest wait
+	// in a queue.
+	MaxConcurrentDownloads int
 	// ShutdownTimeout is how long in-flight downloads may run after a shutdown
 	// signal before they are cancelled.
 	ShutdownTimeout time.Duration
@@ -45,6 +48,7 @@ const (
 	keyHTTPPort        = "URTUBE_HTTP_PORT"
 	keyDownloadDir     = "URTUBE_DOWNLOAD_DIR"
 	keyTempDir         = "URTUBE_TEMP_DIR"
+	keyMaxConcurrent   = "URTUBE_MAX_CONCURRENT_DOWNLOADS"
 	keyShutdownTimeout = "URTUBE_SHUTDOWN_TIMEOUT"
 	keyLogLevel        = "URTUBE_LOG_LEVEL"
 	keyLogJSON         = "URTUBE_LOG_JSON"
@@ -72,6 +76,7 @@ func Load() (*Config, error) {
 	v.SetDefault(keyHTTPPort, "8080")
 	v.SetDefault(keyDownloadDir, "./downloads")
 	v.SetDefault(keyTempDir, filepath.Join(os.TempDir(), "urtube"))
+	v.SetDefault(keyMaxConcurrent, 2)
 	v.SetDefault(keyShutdownTimeout, "5s")
 	v.SetDefault(keyLogLevel, "info")
 	v.SetDefault(keyLogJSON, false)
@@ -111,21 +116,27 @@ func NewConfigWithViper(v *viper.Viper) (*Config, error) {
 		return nil, fmt.Errorf("%s: must be a positive duration such as 30s, got %q", keyShutdownTimeout, v.GetString(keyShutdownTimeout))
 	}
 
+	maxConcurrent, err := strconv.Atoi(v.GetString(keyMaxConcurrent))
+	if err != nil || maxConcurrent < 1 {
+		return nil, fmt.Errorf("%s: must be a positive integer, got %q", keyMaxConcurrent, v.GetString(keyMaxConcurrent))
+	}
+
 	port := v.GetString(keyHTTPPort)
 	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
 		return nil, fmt.Errorf("%s: must be a port number between 1 and 65535, got %q", keyHTTPPort, port)
 	}
 
 	cfg := &Config{
-		HTTPHost:        v.GetString(keyHTTPHost),
-		HTTPPort:        port,
-		DownloadDir:     v.GetString(keyDownloadDir),
-		TempDir:         v.GetString(keyTempDir),
-		ShutdownTimeout: timeout,
-		LogLevel:        level,
-		JSON:            v.GetBool(keyLogJSON),
-		Concise:         v.GetBool(keyLogConcise),
-		RequestHeaders:  v.GetBool(keyLogHeaders),
+		HTTPHost:               v.GetString(keyHTTPHost),
+		HTTPPort:               port,
+		DownloadDir:            v.GetString(keyDownloadDir),
+		TempDir:                v.GetString(keyTempDir),
+		MaxConcurrentDownloads: maxConcurrent,
+		ShutdownTimeout:        timeout,
+		LogLevel:               level,
+		JSON:                   v.GetBool(keyLogJSON),
+		Concise:                v.GetBool(keyLogConcise),
+		RequestHeaders:         v.GetBool(keyLogHeaders),
 	}
 
 	if cfg.DownloadDir == "" {
