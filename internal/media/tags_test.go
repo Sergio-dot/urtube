@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -298,4 +299,62 @@ func TestSuggestService(t *testing.T) {
 		assert.ErrorIs(t, err, ErrVideoUnavailable)
 		assert.EqualError(t, err, "could not read the video: Private video")
 	})
+}
+
+// countingNotifier counts LibraryChanged calls.
+type countingNotifier struct{ calls chan struct{} }
+
+func (n countingNotifier) LibraryChanged(ctx context.Context) error {
+	n.calls <- struct{}{}
+	return nil
+}
+
+func TestDownloadService_NotifiesLibraryOnceIdle(t *testing.T) {
+	release := make(chan struct{})
+	svc := NewDownloadService(blockingFetcher(release), testDest, 1)
+	notifier := countingNotifier{calls: make(chan struct{}, 10)}
+	svc.SetLibraryNotifier(notifier)
+	_, updates, unsubscribe := svc.Subscribe()
+	defer unsubscribe()
+
+	// Three downloads, one at a time: one notification at the end.
+	var ids []string
+	for range 3 {
+		d, err := svc.Start(validRequest)
+		require.NoError(t, err)
+		ids = append(ids, d.ID)
+	}
+	close(release)
+	for _, id := range ids {
+		statusesUntilTerminal(t, updates, id)
+	}
+
+	select {
+	case <-notifier.calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("library not notified")
+	}
+	select {
+	case <-notifier.calls:
+		t.Fatal("notified more than once for one batch")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestDownloadService_NoNotificationWithoutFinishedDownloads(t *testing.T) {
+	svc := NewDownloadService(&fakeFetcher{inspectErr: errors.New("gone")}, testDest, 1)
+	notifier := countingNotifier{calls: make(chan struct{}, 10)}
+	svc.SetLibraryNotifier(notifier)
+	_, updates, unsubscribe := svc.Subscribe()
+	defer unsubscribe()
+
+	d, err := svc.Start(validRequest)
+	require.NoError(t, err)
+	statusesUntilTerminal(t, updates, d.ID)
+
+	select {
+	case <-notifier.calls:
+		t.Fatal("a failed download must not trigger a library scan")
+	case <-time.After(200 * time.Millisecond):
+	}
 }

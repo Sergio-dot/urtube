@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +24,7 @@ type DownloadService struct {
 	fetcher       Fetcher
 	destination   Destination
 	maxConcurrent int
+	notifier      LibraryNotifier
 
 	mu          sync.Mutex
 	jobs        map[string]*job // queued and running downloads
@@ -33,7 +35,13 @@ type DownloadService struct {
 	draining    bool
 	closed      bool
 	inFlight    sync.WaitGroup
+	// changed is set when a download finishes and cleared when the library
+	// is notified.
+	changed bool
 }
+
+// libraryNotifyTimeout bounds one LibraryChanged call.
+const libraryNotifyTimeout = 30 * time.Second
 
 type job struct {
 	seq    uint64
@@ -42,6 +50,14 @@ type job struct {
 	dir    string // where the finished files go, fixed when it was started
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+// SetLibraryNotifier makes the service call n once the queue is empty after
+// at least one download finished. Call it before starting downloads.
+func (s *DownloadService) SetLibraryNotifier(n LibraryNotifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notifier = n
 }
 
 // NewDownloadService creates a DownloadService that saves downloads where
@@ -180,6 +196,24 @@ func (s *DownloadService) finishLocked(j *job, status Status, errMsg string) {
 	j.cancel()
 	s.inFlight.Done()
 	s.dispatchLocked()
+
+	// Tell the library once the queue has emptied, not after every file, so
+	// a batch of downloads causes a single library scan.
+	if status == StatusFinished {
+		s.changed = true
+	}
+	if s.changed && s.running == 0 && len(s.pending) == 0 && s.notifier != nil {
+		s.changed = false
+		go s.notifyLibrary()
+	}
+}
+
+func (s *DownloadService) notifyLibrary() {
+	ctx, cancel := context.WithTimeout(context.Background(), libraryNotifyTimeout)
+	defer cancel()
+	if err := s.notifier.LibraryChanged(ctx); err != nil {
+		slog.Warn("could not tell the media library about new downloads", "error", err)
+	}
 }
 
 // Cancel stops an active download. It returns ErrNotFound if id is unknown or

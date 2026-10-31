@@ -13,7 +13,7 @@ import (
 func TestStore(t *testing.T) {
 	t.Run("uses the default until a folder is chosen", func(t *testing.T) {
 		def := t.TempDir()
-		s, err := Open(t.TempDir(), def, "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: def})
 		require.NoError(t, err)
 
 		dir, err := s.DownloadDir()
@@ -24,12 +24,12 @@ func TestStore(t *testing.T) {
 
 	t.Run("saves the chosen folder across restarts", func(t *testing.T) {
 		dataDir, chosen := t.TempDir(), t.TempDir()
-		s, err := Open(dataDir, "/default", "")
+		s, err := Open(dataDir, Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 
 		require.NoError(t, s.SetDownloadDir(chosen+"/"))
 
-		reopened, err := Open(dataDir, "/default", "")
+		reopened, err := Open(dataDir, Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 		assert.Equal(t, chosen, reopened.CurrentDownloadDir(), "stored cleaned")
 		entries, _ := os.ReadDir(dataDir)
@@ -37,7 +37,7 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("empty folder restores the default", func(t *testing.T) {
-		s, err := Open(t.TempDir(), "/default", "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 		require.NoError(t, s.SetDownloadDir(t.TempDir()))
 
@@ -46,7 +46,7 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("creates a missing folder", func(t *testing.T) {
-		s, err := Open(t.TempDir(), "/default", "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 		dir := filepath.Join(t.TempDir(), "music", "new")
 
@@ -55,7 +55,7 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("rejects relative paths", func(t *testing.T) {
-		s, err := Open(t.TempDir(), "/default", "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 
 		err = s.SetDownloadDir("music")
@@ -67,7 +67,7 @@ func TestStore(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("root bypasses file permissions")
 		}
-		s, err := Open(t.TempDir(), "/default", "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 		dir := t.TempDir()
 		require.NoError(t, os.Chmod(dir, 0o555))
@@ -86,7 +86,7 @@ func TestStore(t *testing.T) {
 		def := t.TempDir()
 		require.NoError(t, os.Chmod(def, 0o555))
 		t.Cleanup(func() { _ = os.Chmod(def, 0o755) })
-		s, err := Open(t.TempDir(), def, "")
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: def})
 		require.NoError(t, err)
 
 		dir, err := s.DownloadDir()
@@ -101,7 +101,7 @@ func TestStore(t *testing.T) {
 		dataDir := t.TempDir()
 		require.NoError(t, os.Chmod(dataDir, 0o555))
 		t.Cleanup(func() { _ = os.Chmod(dataDir, 0o755) })
-		s, err := Open(dataDir, "/default", "")
+		s, err := Open(dataDir, Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 
 		err = s.SetDownloadDir(t.TempDir())
@@ -114,7 +114,7 @@ func TestStore(t *testing.T) {
 		dataDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(dataDir, FileName), []byte("{nope"), 0o644))
 
-		s, err := Open(dataDir, "/default", "")
+		s, err := Open(dataDir, Defaults{DownloadDir: "/default"})
 		assert.Error(t, err)
 		require.NotNil(t, s)
 		assert.Equal(t, "/default", s.CurrentDownloadDir())
@@ -123,7 +123,7 @@ func TestStore(t *testing.T) {
 
 	t.Run("only allows folders inside the root", func(t *testing.T) {
 		root := t.TempDir()
-		s, err := Open(t.TempDir(), root, root)
+		s, err := Open(t.TempDir(), Defaults{DownloadDir: root, DownloadRoot: root})
 		require.NoError(t, err)
 		assert.Equal(t, root, s.Root())
 
@@ -145,15 +145,63 @@ func TestStore(t *testing.T) {
 
 	t.Run("reports a saved folder outside a new root", func(t *testing.T) {
 		dataDir, oldDir := t.TempDir(), t.TempDir()
-		s, err := Open(dataDir, "/default", "")
+		s, err := Open(dataDir, Defaults{DownloadDir: "/default"})
 		require.NoError(t, err)
 		require.NoError(t, s.SetDownloadDir(oldDir))
 
 		root := t.TempDir()
-		s, err = Open(dataDir, root, root)
+		s, err = Open(dataDir, Defaults{DownloadDir: root, DownloadRoot: root})
 		require.NoError(t, err)
 		dir, err := s.DownloadDir()
 		assert.Equal(t, oldDir, dir)
 		assert.EqualError(t, err, "download folder must be inside "+root)
+	})
+
+	t.Run("Jellyfin defaults, saved values and clearing", func(t *testing.T) {
+		dataDir := t.TempDir()
+		s, err := Open(dataDir, Defaults{JellyfinURL: "http://env:8096", JellyfinAPIKey: "envkey"})
+		require.NoError(t, err)
+		url, key := s.Jellyfin()
+		assert.Equal(t, "http://env:8096", url)
+		assert.Equal(t, "envkey", key)
+
+		key2 := " abc123 "
+		require.NoError(t, s.SetJellyfin("http://jellyfin:8096/", &key2))
+		reopened, err := Open(dataDir, Defaults{})
+		require.NoError(t, err)
+		url, key = reopened.Jellyfin()
+		assert.Equal(t, "http://jellyfin:8096", url, "trailing slash dropped")
+		assert.Equal(t, "abc123", key)
+
+		require.NoError(t, reopened.SetJellyfin("http://other:8096", nil))
+		_, key = reopened.Jellyfin()
+		assert.Equal(t, "abc123", key, "a nil key keeps the saved one")
+
+		empty := ""
+		require.NoError(t, reopened.SetJellyfin("", &empty))
+		url, key = reopened.Jellyfin()
+		assert.Empty(t, url)
+		assert.Empty(t, key)
+	})
+
+	t.Run("invalid Jellyfin settings", func(t *testing.T) {
+		s, err := Open(t.TempDir(), Defaults{})
+		require.NoError(t, err)
+		for _, u := range []string{"jellyfin:8096", "ftp://x", "http://", "http://x/?a=b"} {
+			assert.ErrorIs(t, s.SetJellyfin(u, nil), media.ErrInvalidInput, u)
+		}
+		bad := "two words"
+		assert.ErrorIs(t, s.SetJellyfin("http://x", &bad), media.ErrInvalidInput)
+	})
+
+	t.Run("the settings file is private", func(t *testing.T) {
+		dataDir := t.TempDir()
+		s, err := Open(dataDir, Defaults{})
+		require.NoError(t, err)
+		key := "k"
+		require.NoError(t, s.SetJellyfin("http://x", &key))
+		info, err := os.Stat(filepath.Join(dataDir, FileName))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	})
 }

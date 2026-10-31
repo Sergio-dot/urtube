@@ -14,7 +14,7 @@ import (
 func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		keyHTTPHost, keyHTTPPort, keyDownloadDir, keyTempDir, keyDataDir, keyDownloadRoot, keyMaxConcurrent, keyShutdownTimeout,
+		keyHTTPHost, keyHTTPPort, keyDownloadDir, keyTempDir, keyDataDir, keyDownloadRoot, keyJellyfinURL, keyJellyfinAPIKey, keyMaxConcurrent, keyShutdownTimeout,
 		keyLogLevel, keyLogJSON, keyLogConcise, keyLogHeaders,
 	} {
 		t.Setenv(k, "")
@@ -47,6 +47,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv(keyTempDir, "/scratch")
 	t.Setenv(keyDataDir, "/var/lib/urtube")
 	t.Setenv(keyDownloadRoot, "/srv/media/")
+	t.Setenv(keyJellyfinURL, "http://jellyfin:8096")
+	t.Setenv(keyJellyfinAPIKey, "k")
 	t.Setenv(keyMaxConcurrent, "4")
 	t.Setenv(keyShutdownTimeout, "1m")
 	t.Setenv(keyLogLevel, "debug")
@@ -62,6 +64,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	assert.Equal(t, "/scratch", cfg.TempDir)
 	assert.Equal(t, "/var/lib/urtube", cfg.DataDir)
 	assert.Equal(t, "/srv/media", cfg.DownloadRoot)
+	assert.Equal(t, "http://jellyfin:8096", cfg.JellyfinURL)
+	assert.Equal(t, "k", cfg.JellyfinAPIKey)
 	assert.Equal(t, 4, cfg.MaxConcurrentDownloads)
 	assert.Equal(t, time.Minute, cfg.ShutdownTimeout)
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)

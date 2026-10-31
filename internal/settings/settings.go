@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,9 +20,23 @@ import (
 // FileName is the settings file inside the data directory.
 const FileName = "settings.json"
 
-// saved is the on-disk format. Empty fields mean "use the default".
+// saved is the on-disk format. Empty fields mean "use the default". The
+// file is only readable by its owner, as it can hold the Jellyfin API key.
 type saved struct {
-	DownloadDir string `json:"downloadDir,omitempty"`
+	DownloadDir    string `json:"downloadDir,omitempty"`
+	JellyfinURL    string `json:"jellyfinUrl,omitempty"`
+	JellyfinAPIKey string `json:"jellyfinApiKey,omitempty"`
+}
+
+// Defaults are the settings from the environment, used until the user
+// changes them in the app.
+type Defaults struct {
+	DownloadDir string
+	// DownloadRoot, if not empty, is the folder every download folder must
+	// be inside.
+	DownloadRoot   string
+	JellyfinURL    string
+	JellyfinAPIKey string
 }
 
 // Store holds the current settings and saves changes to its file. It
@@ -30,21 +45,24 @@ type Store struct {
 	path               string
 	defaultDownloadDir string
 	root               string
+	defaultJellyfinURL string
+	defaultJellyfinKey string
 
 	mu    sync.RWMutex
 	saved saved
 }
 
-// Open loads the settings saved in dataDir, if any. defaultDownloadDir
-// applies until the user picks another folder. If root is not empty, every
-// download folder must be inside it. A missing file is not an error; an
-// unreadable one is, but the returned Store still works with the defaults
-// and overwrites the file on the next change.
-func Open(dataDir, defaultDownloadDir, root string) (*Store, error) {
+// Open loads the settings saved in dataDir, if any, on top of defaults. A
+// missing file is not an error; an unreadable one is, but the returned
+// Store still works with the defaults and overwrites the file on the next
+// change.
+func Open(dataDir string, defaults Defaults) (*Store, error) {
 	s := &Store{
 		path:               filepath.Join(dataDir, FileName),
-		defaultDownloadDir: defaultDownloadDir,
-		root:               root,
+		defaultDownloadDir: defaults.DownloadDir,
+		root:               defaults.DownloadRoot,
+		defaultJellyfinURL: defaults.JellyfinURL,
+		defaultJellyfinKey: defaults.JellyfinAPIKey,
 	}
 
 	data, err := os.ReadFile(s.path)
@@ -131,6 +149,64 @@ func (s *Store) SetDownloadDir(dir string) error {
 	}
 	s.saved = next
 	return nil
+}
+
+// Jellyfin returns the Jellyfin URL and API key; either may be empty, which
+// means library refreshes are off.
+func (s *Store) Jellyfin() (url, apiKey string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	url, apiKey = s.saved.JellyfinURL, s.saved.JellyfinAPIKey
+	if url == "" {
+		url = s.defaultJellyfinURL
+	}
+	if apiKey == "" {
+		apiKey = s.defaultJellyfinKey
+	}
+	return url, apiKey
+}
+
+// SetJellyfin saves the Jellyfin URL and, unless apiKey is nil, the API
+// key. Empty values go back to the defaults from the environment.
+func (s *Store) SetJellyfin(url string, apiKey *string) error {
+	url, err := ValidJellyfinURL(url)
+	if err != nil {
+		return err
+	}
+	if apiKey != nil {
+		key := strings.TrimSpace(*apiKey)
+		if len(key) > 200 || strings.ContainsFunc(key, func(r rune) bool { return r <= ' ' || r == '"' }) {
+			return media.InvalidInput("the Jellyfin API key looks wrong: copy it again from Jellyfin's dashboard")
+		}
+		apiKey = &key
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.saved
+	next.JellyfinURL = url
+	if apiKey != nil {
+		next.JellyfinAPIKey = *apiKey
+	}
+	if err := s.writeLocked(next); err != nil {
+		return err
+	}
+	s.saved = next
+	return nil
+}
+
+// ValidJellyfinURL checks that raw is empty or an absolute http(s) URL, and
+// returns it without a trailing slash.
+func ValidJellyfinURL(raw string) (string, error) {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
+		return "", media.InvalidInput("the Jellyfin URL must look like http://192.168.1.10:8096")
+	}
+	return raw, nil
 }
 
 // writeLocked saves v atomically, so a crash never leaves a half-written

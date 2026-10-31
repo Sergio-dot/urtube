@@ -62,10 +62,12 @@ func (f *fakeSuggester) Suggest(ctx context.Context, url string) (media.Suggesti
 // fakeSettings stores the download folder in memory. dirErr, if set, is
 // reported for the current folder; setErr is returned by SetDownloadDir.
 type fakeSettings struct {
-	root   string
-	dir    string
-	dirErr error
-	setErr error
+	root        string
+	jellyfinURL string
+	jellyfinKey string
+	dir         string
+	dirErr      error
+	setErr      error
 }
 
 func (f *fakeSettings) DownloadDir() (string, error) {
@@ -78,6 +80,19 @@ func (f *fakeSettings) DownloadDir() (string, error) {
 func (f *fakeSettings) DefaultDownloadDir() string { return "/downloads" }
 
 func (f *fakeSettings) Root() string { return f.root }
+
+func (f *fakeSettings) Jellyfin() (string, string) { return f.jellyfinURL, f.jellyfinKey }
+
+func (f *fakeSettings) SetJellyfin(url string, apiKey *string) error {
+	if strings.HasPrefix(url, "bad") {
+		return media.InvalidInput("the Jellyfin URL must look like http://192.168.1.10:8096")
+	}
+	f.jellyfinURL = url
+	if apiKey != nil {
+		f.jellyfinKey = *apiKey
+	}
+	return nil
+}
 
 func (f *fakeSettings) SetDownloadDir(dir string) error {
 	if f.setErr != nil {
@@ -447,7 +462,8 @@ func TestSettings(t *testing.T) {
 			"downloadDir": "/downloads",
 			"defaultDownloadDir": "/downloads",
 			"downloadRoot": "/",
-			"downloadDirError": "/downloads is not writable: permission denied"
+			"downloadDirError": "/downloads is not writable: permission denied",
+			"jellyfin": {"url": "", "apiKeySet": false, "enabled": false}
 		}`, w.Body.String())
 	})
 
@@ -458,7 +474,8 @@ func TestSettings(t *testing.T) {
 		w := do(h, http.MethodPut, "/api/v1/settings", `{"downloadDir": " /media/music "}`)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.JSONEq(t, `{"downloadDir": "/media/music", "defaultDownloadDir": "/downloads"}`, w.Body.String())
+		assert.JSONEq(t, `{"downloadDir": "/media/music", "defaultDownloadDir": "/downloads",
+			"jellyfin": {"url": "", "apiKeySet": false, "enabled": false}}`, w.Body.String())
 		assert.Equal(t, "/media/music", s.dir, "surrounding whitespace is trimmed")
 	})
 
@@ -569,4 +586,70 @@ func TestSearch_SourceFailure(t *testing.T) {
 	w := do(h, http.MethodGet, "/api/v1/search/q?source=music", "")
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 	assert.Equal(t, "search failed: Sign in to confirm you’re not a bot.", errorMessage(t, w))
+}
+
+func TestSettings_Jellyfin(t *testing.T) {
+	t.Run("saving reports the key as set, never its value", func(t *testing.T) {
+		s := &fakeSettings{dir: "/music"}
+		h := newTestRouter(t, Deps{Settings: s})
+
+		w := do(h, http.MethodPut, "/api/v1/settings", `{"jellyfin": {"url": "http://jellyfin:8096", "apiKey": "s3cret"}}`)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), "s3cret")
+		assert.Contains(t, w.Body.String(), `"jellyfin":{"url":"http://jellyfin:8096","apiKeySet":true,"enabled":true}`)
+		assert.Equal(t, "/music", s.dir, "the download folder is left alone")
+	})
+
+	t.Run("omitting the key keeps it", func(t *testing.T) {
+		s := &fakeSettings{jellyfinKey: "old"}
+		h := newTestRouter(t, Deps{Settings: s})
+		do(h, http.MethodPut, "/api/v1/settings", `{"jellyfin": {"url": "http://new:8096"}}`)
+		assert.Equal(t, "old", s.jellyfinKey)
+		assert.Equal(t, "http://new:8096", s.jellyfinURL)
+	})
+
+	t.Run("invalid URL is 400", func(t *testing.T) {
+		h := newTestRouter(t, Deps{})
+		w := do(h, http.MethodPut, "/api/v1/settings", `{"jellyfin": {"url": "bad"}}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestJellyfinTest(t *testing.T) {
+	check := func(gotURL, gotKey *string, err error) func(context.Context, string, string) (string, error) {
+		return func(ctx context.Context, url, key string) (string, error) {
+			*gotURL, *gotKey = url, key
+			return "Home (Jellyfin 10.11.2)", err
+		}
+	}
+
+	t.Run("uses the saved key unless one is given", func(t *testing.T) {
+		var url, key string
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{jellyfinKey: "saved"}, CheckJellyfin: check(&url, &key, nil)})
+
+		w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": " http://jellyfin:8096 "}`)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"message": "Connected to Home (Jellyfin 10.11.2)"}`, w.Body.String())
+		assert.Equal(t, "http://jellyfin:8096", url)
+		assert.Equal(t, "saved", key)
+
+		do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": "http://j", "apiKey": "typed"}`)
+		assert.Equal(t, "typed", key)
+	})
+
+	t.Run("failures are 502 with the reason", func(t *testing.T) {
+		var url, key string
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{}, CheckJellyfin: check(&url, &key, errors.New("Jellyfin rejected the API key"))})
+		w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": "http://j", "apiKey": "k"}`)
+		assert.Equal(t, http.StatusBadGateway, w.Code)
+		assert.Equal(t, "Jellyfin rejected the API key", errorMessage(t, w))
+	})
+
+	t.Run("needs a URL and key", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{}})
+		w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": "http://j"}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
 }
