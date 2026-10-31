@@ -1,8 +1,9 @@
+// Command urtube serves the urtube web app: YouTube search and downloads
+// backed by yt-dlp.
 package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,15 +14,13 @@ import (
 	"time"
 
 	"github.com/Sergio-dot/urtube/internal/config"
-	"github.com/Sergio-dot/urtube/internal/download"
 	"github.com/Sergio-dot/urtube/internal/health"
-	"github.com/Sergio-dot/urtube/internal/router"
-	"github.com/Sergio-dot/urtube/internal/search"
+	"github.com/Sergio-dot/urtube/internal/httpapi"
+	"github.com/Sergio-dot/urtube/internal/media"
 	"github.com/Sergio-dot/urtube/internal/server"
+	"github.com/Sergio-dot/urtube/internal/ytdlp"
+	"github.com/Sergio-dot/urtube/web"
 )
-
-//go:embed all:web/dist
-var uiFS embed.FS
 
 // httpShutdownTimeout bounds closing the HTTP server once downloads have
 // drained and event streams have ended; only short requests remain by then.
@@ -59,15 +58,22 @@ func run() error {
 		}
 	}
 
-	dl := &download.YtdlpDownloader{DownloadDir: cfg.DownloadDir, TempDir: cfg.TempDir}
-	manager := download.NewDownloadManager(dl)
+	ui, err := web.Dist()
+	if err != nil {
+		return fmt.Errorf("load embedded UI: %w", err)
+	}
+
+	downloads := media.NewDownloadService(
+		&ytdlp.Fetcher{DownloadDir: cfg.DownloadDir, TempDir: cfg.TempDir},
+		cfg.MaxConcurrentDownloads,
+	)
 
 	var shuttingDown atomic.Bool
-	handler := router.NewRouter(router.Dependencies{
-		Searcher:     &search.YtdlpSearcher{},
-		Manager:      manager,
+	handler := httpapi.NewRouter(httpapi.Deps{
+		Search:       media.NewSearchService(&ytdlp.Searcher{}),
+		Downloads:    downloads,
+		UI:           ui,
 		Config:       *cfg,
-		UI:           uiFS,
 		YtdlpVersion: deps.YtdlpVersion,
 		Ready:        func() bool { return !shuttingDown.Load() },
 	})
@@ -79,7 +85,8 @@ func run() error {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Start() }()
-	slog.Info("ready", "ytdlp", deps.YtdlpVersion, "downloadDir", cfg.DownloadDir)
+	slog.Info("ready", "ytdlp", deps.YtdlpVersion, "downloadDir", cfg.DownloadDir,
+		"maxConcurrentDownloads", cfg.MaxConcurrentDownloads)
 
 	select {
 	case err := <-serveErr:
@@ -94,7 +101,7 @@ func run() error {
 
 	drainCtx, cancelDrain := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancelDrain()
-	manager.Drain(drainCtx)
+	downloads.Drain(drainCtx)
 
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), httpShutdownTimeout)
 	defer cancelStop()

@@ -38,7 +38,7 @@ export default function SearchResults({
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {results.map((video) => {
           const duration = formatDuration(video.duration);
-          const isLive = duration.includes("NaN");
+          const isLive = video.isLive;
           const isInQueue = queue.some((v) => v.id === video.id);
           const downloadState = downloadStates[video.id];
 

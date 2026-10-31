@@ -1,0 +1,377 @@
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"testing/fstest"
+	"time"
+
+	"github.com/Sergio-dot/urtube/internal/media"
+	"github.com/stretchr/testify/assert"
+)
+
+type fakeSearcher struct {
+	videos []media.Video
+	err    error
+
+	gotQuery string
+	gotLimit int
+	gotLive  bool
+}
+
+func (f *fakeSearcher) Search(ctx context.Context, query string, limit int, includeLive bool) ([]media.Video, error) {
+	f.gotQuery, f.gotLimit, f.gotLive = query, limit, includeLive
+	return f.videos, f.err
+}
+
+// blockingFetcher blocks every download until its context is cancelled.
+type blockingFetcher struct{}
+
+func (blockingFetcher) Fetch(ctx context.Context, req media.Request, onProgress func(media.Progress)) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// drainNow drains svc, cancelling running downloads immediately.
+func drainNow(svc *media.DownloadService) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.Drain(ctx)
+}
+
+func newTestRouter(t *testing.T, deps Deps) http.Handler {
+	t.Helper()
+	if deps.Search == nil {
+		deps.Search = &fakeSearcher{}
+	}
+	if deps.Downloads == nil {
+		svc := media.NewDownloadService(blockingFetcher{}, 2)
+		t.Cleanup(func() { drainNow(svc) })
+		deps.Downloads = svc
+	}
+	return NewRouter(deps)
+}
+
+func do(h http.Handler, method, target, body string) *httptest.ResponseRecorder {
+	var r io.Reader
+	if body != "" {
+		r = strings.NewReader(body)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(method, target, r))
+	return w
+}
+
+func errorMessage(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var resp errorResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	return resp.Error
+}
+
+func TestErrorStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		msg    string
+	}{
+		{name: "transport error", err: statusError{status: http.StatusBadRequest, msg: "invalid request body"}, status: 400, msg: "invalid request body"},
+		{name: "validation error", err: media.ErrInvalidURL, status: 400, msg: media.ErrInvalidURL.Error()},
+		{name: "wrapped validation error", err: fmt.Errorf("%w %q", media.ErrInvalidFormat, "exe"), status: 400, msg: `unsupported format "exe"`},
+		{name: "not found", err: media.ErrNotFound, status: 404, msg: "download not found"},
+		{name: "no results", err: media.ErrNoResults, status: 404, msg: "no results found"},
+		{name: "draining", err: media.ErrDraining, status: 503, msg: "server is shutting down"},
+		{name: "unknown errors don't leak", err: errors.New("exec: /usr/bin/yt-dlp: permission denied"), status: 500, msg: "internal server error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, msg := errorStatus(tt.err)
+			assert.Equal(t, tt.status, status)
+			assert.Equal(t, tt.msg, msg)
+		})
+	}
+}
+
+func TestSearch(t *testing.T) {
+	t.Run("passes parameters and maps results", func(t *testing.T) {
+		search := &fakeSearcher{videos: []media.Video{
+			{ID: "a", Title: "Song", Uploader: "Artist", Duration: 212 * time.Second, URL: "https://youtube.com/watch?v=a",
+				Thumbnails: []media.Thumbnail{{URL: "https://i.ytimg.com/a.jpg", Width: 320, Height: 180}}},
+			{ID: "b", Title: "Live", URL: "https://youtube.com/watch?v=b", IsLive: true},
+		}}
+		h := newTestRouter(t, Deps{Search: search})
+
+		w := do(h, http.MethodGet, "/api/v1/search/never%20gonna?limit=20&wantLiveStreams=true", "")
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "never gonna", search.gotQuery)
+		assert.Equal(t, 20, search.gotLimit)
+		assert.True(t, search.gotLive)
+		assert.JSONEq(t, `[
+			{"id":"a","title":"Song","uploader":"Artist","duration":212,"url":"https://youtube.com/watch?v=a","isLive":false,
+			 "thumbnails":[{"url":"https://i.ytimg.com/a.jpg","width":320,"height":180}]},
+			{"id":"b","title":"Live","uploader":"","duration":0,"url":"https://youtube.com/watch?v=b","isLive":true,"thumbnails":[]}
+		]`, w.Body.String())
+	})
+
+	t.Run("invalid limit is left to the service", func(t *testing.T) {
+		search := &fakeSearcher{videos: []media.Video{{ID: "a"}}}
+		h := newTestRouter(t, Deps{Search: search})
+
+		do(h, http.MethodGet, "/api/v1/search/q?limit=abc", "")
+		assert.Equal(t, 0, search.gotLimit)
+		assert.False(t, search.gotLive)
+	})
+
+	t.Run("errors are mapped", func(t *testing.T) {
+		tests := []struct {
+			err    error
+			status int
+		}{
+			{err: media.ErrNoResults, status: http.StatusNotFound},
+			{err: media.ErrQueryRequired, status: http.StatusBadRequest},
+			{err: errors.New("yt-dlp crashed"), status: http.StatusInternalServerError},
+		}
+		for _, tt := range tests {
+			h := newTestRouter(t, Deps{Search: &fakeSearcher{err: tt.err}})
+			w := do(h, http.MethodGet, "/api/v1/search/q", "")
+			assert.Equal(t, tt.status, w.Code, tt.err.Error())
+		}
+	})
+}
+
+func TestStartDownload(t *testing.T) {
+	valid := `{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ","title":"Song","options":{"type":"audio","format":"mp3"}}`
+
+	t.Run("accepts a valid request", func(t *testing.T) {
+		w := do(newTestRouter(t, Deps{}), http.MethodPost, "/api/v1/download", valid)
+
+		assert.Equal(t, http.StatusAccepted, w.Code)
+		var resp downloadResponse
+		assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.NotEmpty(t, resp.UUID)
+		assert.Equal(t, "download started", resp.Message)
+	})
+
+	t.Run("rejects bad requests", func(t *testing.T) {
+		tests := []struct {
+			name string
+			body string
+			msg  string
+		}{
+			{name: "malformed JSON", body: `{"url":`, msg: "invalid request body"},
+			{name: "raw yt-dlp flags", body: `{"url":"https://youtu.be/x","options":{"type":"audio","format":"mp3"},"flags":{"post_processing":{"exec":["id"]}}}`, msg: "invalid request body"},
+			{name: "env injection", body: `{"url":"https://youtu.be/x","options":{"type":"audio","format":"mp3"},"env":{"LD_PRELOAD":"x"}}`, msg: "invalid request body"},
+			{name: "URL as a flag", body: `{"url":"--batch-file=/etc/passwd","options":{"type":"audio","format":"mp3"}}`, msg: media.ErrInvalidURL.Error()},
+			{name: "format not allowed", body: `{"url":"https://youtu.be/x","options":{"type":"audio","format":"exe"}}`, msg: `unsupported format "exe" for type audio`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				w := do(newTestRouter(t, Deps{}), http.MethodPost, "/api/v1/download", tt.body)
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.Equal(t, tt.msg, errorMessage(t, w))
+			})
+		}
+	})
+
+	t.Run("503 while shutting down", func(t *testing.T) {
+		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		drainNow(svc)
+
+		w := do(newTestRouter(t, Deps{Downloads: svc}), http.MethodPost, "/api/v1/download", valid)
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	})
+}
+
+func TestCancelDownload(t *testing.T) {
+	svc := media.NewDownloadService(blockingFetcher{}, 1)
+	t.Cleanup(func() { drainNow(svc) })
+	h := newTestRouter(t, Deps{Downloads: svc})
+
+	t.Run("unknown id is 404", func(t *testing.T) {
+		w := do(h, http.MethodDelete, "/api/v1/download/nope", "")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("active download is cancelled", func(t *testing.T) {
+		d, err := svc.Start(media.Request{URL: "https://example.com/v", Options: media.Options{Type: media.MediaAudio, Format: "mp3"}})
+		assert.NoError(t, err)
+
+		w := do(h, http.MethodDelete, "/api/v1/download/"+d.ID, "")
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"uuid":"`+d.ID+`","message":"download cancelled"}`, w.Body.String())
+	})
+}
+
+// streamEvents runs the events handler until ctx is done or the stream ends
+// and returns what it wrote.
+func streamEvents(t *testing.T, a *api, ctx context.Context) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
+	assert.NoError(t, a.events(w, req))
+	return w
+}
+
+func TestEvents(t *testing.T) {
+	audio := media.Options{Type: media.MediaAudio, Format: "mp3"}
+
+	t.Run("sends active downloads on connect", func(t *testing.T) {
+		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		t.Cleanup(func() { drainNow(svc) })
+		running, _ := svc.Start(media.Request{URL: "https://example.com/1", Title: "One", Options: audio})
+		queued, _ := svc.Start(media.Request{URL: "https://example.com/2", Title: "Two", Options: audio})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+		w := streamEvents(t, &api{Deps: Deps{Downloads: svc}, keepAlive: time.Hour}, ctx)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+		body := w.Body.String()
+		assert.Contains(t, body, `"uuid":"`+running.ID+`","videoId":"","title":"One","status":"downloading"`)
+		assert.Contains(t, body, `"uuid":"`+queued.ID+`","videoId":"","title":"Two","status":"queued"`)
+		assert.Less(t, strings.Index(body, running.ID), strings.Index(body, queued.ID), "oldest first")
+	})
+
+	t.Run("sends keep-alives", func(t *testing.T) {
+		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Millisecond)
+		defer cancel()
+
+		w := streamEvents(t, &api{Deps: Deps{Downloads: svc}, keepAlive: 10 * time.Millisecond}, ctx)
+		assert.Contains(t, w.Body.String(), ": keep-alive\n\n")
+	})
+
+	t.Run("ends when the service drains", func(t *testing.T) {
+		svc := media.NewDownloadService(blockingFetcher{}, 1)
+		d, _ := svc.Start(media.Request{URL: "https://example.com/1", Options: audio})
+
+		done := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			done <- streamEvents(t, &api{Deps: Deps{Downloads: svc}, keepAlive: time.Hour}, context.Background())
+		}()
+		time.Sleep(20 * time.Millisecond)
+		drainNow(svc)
+
+		select {
+		case w := <-done:
+			assert.Contains(t, w.Body.String(), `"uuid":"`+d.ID+`","videoId":"","title":"","status":"cancelled"`)
+		case <-time.After(2 * time.Second):
+			t.Fatal("event stream did not end after Drain")
+		}
+	})
+}
+
+func TestNewDownloadEvent(t *testing.T) {
+	t.Run("formats progress", func(t *testing.T) {
+		e := newDownloadEvent(media.Download{
+			ID: "id", VideoID: "v", Title: "Song", Status: media.StatusDownloading,
+			Progress: media.Progress{DownloadedBytes: 1 << 20, TotalBytes: 4 << 20, BytesPerSecond: 512 << 10, ETA: 6 * time.Second},
+		})
+		assert.Equal(t, downloadEvent{
+			UUID: "id", VideoID: "v", Title: "Song", Status: "downloading",
+			Percent: "25.00%", Speed: "512.0 KiB/s", ETA: "6s", Downloaded: "1.0 MiB", Total: "4.0 MiB",
+		}, e)
+	})
+
+	t.Run("unknown progress is empty", func(t *testing.T) {
+		e := newDownloadEvent(media.Download{ID: "id", Status: media.StatusQueued})
+		assert.Equal(t, downloadEvent{UUID: "id", Status: "queued"}, e)
+	})
+
+	t.Run("finished is 100%", func(t *testing.T) {
+		assert.Equal(t, "100%", newDownloadEvent(media.Download{Status: media.StatusFinished}).Percent)
+	})
+
+	t.Run("errors carry the message", func(t *testing.T) {
+		e := newDownloadEvent(media.Download{Status: media.StatusError, Error: "Video unavailable"})
+		assert.Equal(t, "Video unavailable", e.ErrorMessage)
+	})
+}
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		input    int64
+		expected string
+	}{
+		{input: -10, expected: "0 B"},
+		{input: 0, expected: "0 B"},
+		{input: 500, expected: "500 B"},
+		{input: 1024, expected: "1.0 KiB"},
+		{input: 5 << 20, expected: "5.0 MiB"},
+		{input: 2 << 30, expected: "2.0 GiB"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, formatBytes(tt.input))
+	}
+}
+
+func TestHealthAndProbes(t *testing.T) {
+	var ready atomic.Bool
+	ready.Store(true)
+	h := newTestRouter(t, Deps{YtdlpVersion: "2026.10.01", Ready: ready.Load})
+
+	t.Run("health reports the startup version", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/api/v1/health", "")
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"status":"ok","dependencies":{"ytdlp":true,"version":"2026.10.01"}}`, w.Body.String())
+	})
+
+	t.Run("health is degraded without yt-dlp", func(t *testing.T) {
+		w := do(newTestRouter(t, Deps{}), http.MethodGet, "/api/v1/health", "")
+		assert.JSONEq(t, `{"status":"degraded","dependencies":{"ytdlp":false}}`, w.Body.String())
+	})
+
+	t.Run("livez", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, do(h, http.MethodGet, "/livez", "").Code)
+	})
+
+	t.Run("readyz follows Ready", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, do(h, http.MethodGet, "/readyz", "").Code)
+		ready.Store(false)
+		assert.Equal(t, http.StatusServiceUnavailable, do(h, http.MethodGet, "/readyz", "").Code)
+	})
+}
+
+func TestUI(t *testing.T) {
+	ui := fstest.MapFS{
+		"index.html":    {Data: []byte("<html>app</html>")},
+		"assets/app.js": {Data: []byte("console.log(1)")},
+	}
+	h := newTestRouter(t, Deps{UI: ui})
+
+	t.Run("serves files", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/assets/app.js", "")
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "console.log(1)", w.Body.String())
+	})
+
+	t.Run("falls back to index.html for client routes", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/some/client/route", "")
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "<html>app</html>", w.Body.String())
+	})
+
+	t.Run("unknown API paths are 404, not the app", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/api/v1/nope", "")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.False(t, bytes.Contains(w.Body.Bytes(), []byte("<html>")))
+	})
+
+	t.Run("no UI is 404", func(t *testing.T) {
+		w := do(newTestRouter(t, Deps{}), http.MethodGet, "/", "")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
