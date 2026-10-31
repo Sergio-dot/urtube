@@ -10,3 +10,6 @@ vet:
 
 build:
 	go build ./...
+
+image:
+	docker build -t urtube:local .
