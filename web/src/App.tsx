@@ -157,7 +157,7 @@ function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to start download");
+        throw new Error(errorData.error || "Failed to start download");
       }
 
       const data = await response.json();
@@ -260,7 +260,7 @@ function App() {
             onAddVideo={addToQueue}
             onRemoveVideo={removeFromQueue}
             onDownloadVideo={handleDownloadRequest}
-            onCancelDownload={removeDownload}
+            onCancelDownload={cancelDownload}
             queue={queue}
             downloadStates={videoStatusMap}
           />

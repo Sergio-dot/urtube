@@ -6,7 +6,7 @@ interface SearchResultsProps {
   onAddVideo: (video: Video) => void;
   onRemoveVideo: (id: string) => void;
   onDownloadVideo: (video: Video) => void;
-  onCancelDownload: (id: string) => void;
+  onCancelDownload: (downloadId: string) => void;
   queue: Video[];
   downloadStates: Record<string, DownloadState>;
 }
@@ -78,7 +78,11 @@ export default function SearchResults({
                   <DownloadButton
                     status={downloadState?.status || "idle"}
                     onClick={() => onDownloadVideo(video)}
-                    onCancel={() => onCancelDownload(video.id)}
+                    onCancel={
+                      downloadState
+                        ? () => onCancelDownload(downloadState.uuid)
+                        : undefined
+                    }
                   />
                   <button
                     onClick={
