@@ -216,11 +216,12 @@ function App() {
     (acc, dl) => {
       if (dl.videoId) {
         const current = acc[dl.videoId];
-        // Priority: finished > downloading > loading > error > cancelled
+        // Priority: finished > downloading/queued > loading > error > cancelled
         if (current?.status === "finished" || current?.status === "success")
           return acc;
         if (
-          current?.status === "downloading" &&
+          (current?.status === "downloading" ||
+            current?.status === "queued") &&
           (dl.status === "loading" ||
             dl.status === "error" ||
             dl.status === "cancelled")

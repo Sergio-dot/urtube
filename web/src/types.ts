@@ -11,6 +11,7 @@ export interface Video {
   duration: number;
   thumbnails: Thumbnail[];
   url: string;
+  isLive: boolean;
 }
 
 export interface SelectOption {
@@ -25,9 +26,20 @@ export type DownloadStatus =
   | "loading"
   | "success"
   | "error"
+  | "queued"
   | "downloading"
   | "finished"
   | "cancelled";
+
+// A download the server is still working on, so it can be cancelled.
+export function isActiveStatus(status: DownloadStatus): boolean {
+  return status === "loading" || status === "queued" || status === "downloading";
+}
+
+// A download that completed successfully.
+export function isDoneStatus(status: DownloadStatus): boolean {
+  return status === "success" || status === "finished";
+}
 
 export interface DownloadOptions {
   type: DownloadType;
@@ -49,7 +61,7 @@ export interface ProgressUpdate {
   uuid: string;
   videoId: string;
   title: string;
-  status: "downloading" | "finished" | "error" | "cancelled";
+  status: "queued" | "downloading" | "finished" | "error" | "cancelled";
   errorMessage?: string;
   percent: string;
   speed: string;

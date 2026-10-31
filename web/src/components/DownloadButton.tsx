@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DownloadStatus } from "../types";
+import { isActiveStatus, isDoneStatus, type DownloadStatus } from "../types";
 
 interface DownloadButtonProps {
   status: DownloadStatus;
@@ -16,6 +16,7 @@ export default function DownloadButton({
 
   const getIcon = () => {
     switch (status) {
+      case "queued":
       case "downloading":
       case "loading":
         if (isHovered && onCancel) {
@@ -63,6 +64,7 @@ export default function DownloadButton({
           </div>
         );
       case "success":
+      case "finished":
         return (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -118,7 +120,7 @@ export default function DownloadButton({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (status === "loading" && onCancel) {
+    if (isActiveStatus(status) && onCancel) {
       onCancel();
     } else if (status === "idle" || status === "error") {
       onClick();
@@ -130,20 +132,22 @@ export default function DownloadButton({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
-      disabled={status === "success"}
+      disabled={isDoneStatus(status)}
       className={`rounded-2xl px-1 py-1 text-xs font-semibold ring-1 ring-inset transition-all cursor-pointer ${
-        status === "success"
+        isDoneStatus(status)
           ? "text-green-400 ring-green-500/30"
           : status === "error"
             ? "text-red-400 ring-red-500/30"
             : "text-indigo-400 ring-indigo-500/30 hover:text-white"
-      } ${status === "loading" && isHovered ? "hover:ring-red-500/30" : ""}`}
+      } ${isActiveStatus(status) && isHovered ? "hover:ring-red-500/30" : ""}`}
       title={
-        status === "loading"
+        isActiveStatus(status)
           ? isHovered
             ? "Cancel Download"
-            : "Downloading..."
-          : status === "success"
+            : status === "queued"
+              ? "Queued"
+              : "Downloading..."
+          : isDoneStatus(status)
             ? "Download Complete"
             : status === "error"
               ? "Download Failed - Retry"

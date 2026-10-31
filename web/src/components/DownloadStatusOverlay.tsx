@@ -6,16 +6,12 @@ import {
   ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import type { DownloadState } from "../types";
+import { isActiveStatus, type DownloadState } from "../types";
 
 interface DownloadStatusOverlayProps {
   downloads: DownloadState[];
   onRemove: (uuid: string) => void;
   onCancel: (uuid: string) => void;
-}
-
-function isActive(status: DownloadState["status"]) {
-  return status == "downloading" || status == "loading";
 }
 
 export default function DownloadStatusOverlay({
@@ -27,7 +23,7 @@ export default function DownloadStatusOverlay({
 
   if (downloads.length === 0) return null;
 
-  const activeCount = downloads.filter((d) => isActive(d.status)).length;
+  const activeCount = downloads.filter((d) => isActiveStatus(d.status)).length;
 
   const truncateSeconds = (durationStr: string | undefined) => {
     return (durationStr || "--").replace(/(\d+)\.(\d+)s$/, "$1s");
@@ -74,16 +70,18 @@ export default function DownloadStatusOverlay({
                         ? dl.errorMessage
                         : dl.status === "cancelled"
                           ? "Cancelled"
-                          : dl.speed || "Starting..."}
+                          : dl.status === "queued"
+                            ? "Queued"
+                            : dl.speed || "Starting..."}
                   </p>
                 </div>
                 <button
                   onClick={() =>
-                    isActive(dl.status) ? onCancel(dl.uuid) : onRemove(dl.uuid)
+                    isActiveStatus(dl.status) ? onCancel(dl.uuid) : onRemove(dl.uuid)
                   }
                   className="rounded-md p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10"
                   aria-label={
-                    isActive(dl.status) ? "Cancel download" : "Dismiss"
+                    isActiveStatus(dl.status) ? "Cancel download" : "Dismiss"
                   }
                 >
                   <XMarkIcon className="h-4 w-4" />
