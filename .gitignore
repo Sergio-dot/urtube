@@ -36,3 +36,6 @@ go.work.sum
 
 # Local runtime state (URTUBE_DATA_DIR default)
 /data/
+
+# Built frontend, embedded by internal/ui (npm run build in web/)
+/internal/ui/dist/

@@ -19,8 +19,8 @@ import (
 	"github.com/Sergio-dot/urtube/internal/media"
 	"github.com/Sergio-dot/urtube/internal/server"
 	"github.com/Sergio-dot/urtube/internal/settings"
+	"github.com/Sergio-dot/urtube/internal/ui"
 	"github.com/Sergio-dot/urtube/internal/ytdlp"
-	"github.com/Sergio-dot/urtube/web"
 )
 
 // httpShutdownTimeout bounds closing the HTTP server once downloads have
@@ -78,7 +78,7 @@ func run() error {
 			"error", err)
 	}
 
-	ui, err := web.Dist()
+	ui, err := ui.Dist()
 	if err != nil {
 		return fmt.Errorf("load embedded UI: %w", err)
 	}
