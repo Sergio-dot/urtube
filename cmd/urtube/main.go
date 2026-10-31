@@ -63,10 +63,11 @@ func run() error {
 		return fmt.Errorf("load embedded UI: %w", err)
 	}
 
-	downloads := media.NewDownloadService(
-		&ytdlp.Fetcher{DownloadDir: cfg.DownloadDir, TempDir: cfg.TempDir},
-		cfg.MaxConcurrentDownloads,
-	)
+	fetcher := &ytdlp.Fetcher{DownloadDir: cfg.DownloadDir, TempDir: cfg.TempDir}
+	if err := fetcher.RemoveStaleTempDirs(); err != nil {
+		slog.Warn("could not remove leftover temp files", "error", err)
+	}
+	downloads := media.NewDownloadService(fetcher, cfg.MaxConcurrentDownloads)
 
 	var shuttingDown atomic.Bool
 	handler := httpapi.NewRouter(httpapi.Deps{
