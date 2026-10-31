@@ -51,14 +51,44 @@ func TestProgressPercent(t *testing.T) {
 }
 
 type fakeSource struct {
-	videos   []Video
-	err      error
-	gotLimit int
+	videos    []Video
+	err       error
+	gotLimit  int
+	gotSource SearchSource
 }
 
 func (f *fakeSource) Search(ctx context.Context, query string, limit int, includeLive bool) ([]Video, error) {
-	f.gotLimit = limit
+	f.gotLimit, f.gotSource = limit, SourceVideos
 	return f.videos, f.err
+}
+
+func (f *fakeSource) SearchMusic(ctx context.Context, query string, limit int) ([]Video, error) {
+	f.gotLimit, f.gotSource = limit, SourceMusic
+	return f.videos, f.err
+}
+
+func TestSearchService_Sources(t *testing.T) {
+	one := []Video{{ID: "a"}}
+
+	t.Run("music is capped lower", func(t *testing.T) {
+		src := &fakeSource{videos: one}
+		_, err := NewSearchService(src).Search(context.Background(), SearchQuery{Text: "q", Limit: 50, Source: SourceMusic})
+		assert.NoError(t, err)
+		assert.Equal(t, SourceMusic, src.gotSource)
+		assert.Equal(t, MaxMusicSearchLimit, src.gotLimit)
+	})
+
+	t.Run("empty source means videos", func(t *testing.T) {
+		src := &fakeSource{videos: one}
+		_, err := NewSearchService(src).Search(context.Background(), SearchQuery{Text: "q"})
+		assert.NoError(t, err)
+		assert.Equal(t, SourceVideos, src.gotSource)
+	})
+
+	t.Run("unknown source", func(t *testing.T) {
+		_, err := NewSearchService(&fakeSource{}).Search(context.Background(), SearchQuery{Text: "q", Source: "podcasts"})
+		assert.ErrorIs(t, err, ErrInvalidInput)
+	})
 }
 
 func TestSearchService(t *testing.T) {
@@ -76,7 +106,7 @@ func TestSearchService(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				src := &fakeSource{videos: []Video{{ID: "a"}}}
-				_, err := NewSearchService(src).Search(context.Background(), "q", tt.limit, false)
+				_, err := NewSearchService(src).Search(context.Background(), SearchQuery{Text: "q", Limit: tt.limit})
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, src.gotLimit)
 			})
@@ -84,18 +114,18 @@ func TestSearchService(t *testing.T) {
 	})
 
 	t.Run("requires a query", func(t *testing.T) {
-		_, err := NewSearchService(&fakeSource{}).Search(context.Background(), "  ", 5, false)
+		_, err := NewSearchService(&fakeSource{}).Search(context.Background(), SearchQuery{Text: "  ", Limit: 5})
 		assert.ErrorIs(t, err, ErrQueryRequired)
 	})
 
 	t.Run("no videos is ErrNoResults", func(t *testing.T) {
-		_, err := NewSearchService(&fakeSource{}).Search(context.Background(), "q", 5, false)
+		_, err := NewSearchService(&fakeSource{}).Search(context.Background(), SearchQuery{Text: "q", Limit: 5})
 		assert.ErrorIs(t, err, ErrNoResults)
 	})
 
 	t.Run("source errors are returned", func(t *testing.T) {
 		boom := errors.New("boom")
-		_, err := NewSearchService(&fakeSource{err: boom}).Search(context.Background(), "q", 5, false)
+		_, err := NewSearchService(&fakeSource{err: boom}).Search(context.Background(), SearchQuery{Text: "q", Limit: 5})
 		assert.ErrorIs(t, err, boom)
 	})
 }

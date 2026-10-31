@@ -37,4 +37,5 @@ var (
 	ErrInvalidURL       error = inputError("url must be an absolute http or https URL")
 	ErrInvalidMediaType error = inputError("options.type must be one of: video, audio")
 	ErrInvalidFormat    error = inputError("unsupported format")
+	ErrInvalidSource    error = inputError("source must be one of: videos, music")
 )

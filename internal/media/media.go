@@ -29,6 +29,11 @@ type Video struct {
 	Thumbnails []Thumbnail
 	URL        string
 	IsLive     bool
+	// Album is set for songs whose album the source knows.
+	Album string
+	// Tags are the tags a download would use, when the source already
+	// knows them (music search results); nil otherwise.
+	Tags *Tags
 }
 
 // MediaType is the kind of media a download produces.
@@ -158,6 +163,9 @@ type VideoSource interface {
 	// Search returns up to limit videos matching query, excluding live
 	// streams unless includeLive is set.
 	Search(ctx context.Context, query string, limit int, includeLive bool) ([]Video, error)
+	// SearchMusic returns up to limit songs matching query, with their
+	// tags.
+	SearchMusic(ctx context.Context, query string, limit int) ([]Video, error)
 }
 
 // Inspector looks up a video without downloading it.

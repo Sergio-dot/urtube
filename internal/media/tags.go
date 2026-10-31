@@ -3,6 +3,7 @@ package media
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -103,14 +104,18 @@ var (
 // music metadata (YouTube Music), an "Artist - Title" video title, and
 // finally the channel name as the artist.
 func GuessTags(info VideoInfo) Tags {
-	if info.Track != "" && len(info.Artists) > 0 {
+	artists := UniqueArtists(info.Artists)
+	if info.Track != "" && len(artists) > 0 {
 		t := Tags{
-			Artist: strings.TrimSpace(info.Artists[0]),
+			Artist: artists[0],
 			Title:  strings.TrimSpace(info.Track),
 			Album:  strings.TrimSpace(info.Album),
 			Year:   info.ReleaseYear,
 		}
-		t.Title = withFeaturing(t.Title, strings.Join(info.Artists[1:], ", "))
+		// A long list is songwriting credits rather than featured artists.
+		if others := artists[1:]; len(others) <= maxFeatured {
+			t.Title = withFeaturing(t.Title, strings.Join(others, ", "))
+		}
 		return t
 	}
 
@@ -140,6 +145,33 @@ func GuessTags(info VideoInfo) Tags {
 		t.Title = strings.TrimSpace(info.Title)
 	}
 	return t
+}
+
+// maxFeatured is the most artists credited as featured in a title.
+const maxFeatured = 3
+
+// UniqueArtists returns artists trimmed, without blanks or repeats (ignoring
+// case), in their original order. YouTube Music sometimes lists every
+// songwriter, some twice.
+func UniqueArtists(artists []string) []string {
+	var out []string
+	for _, a := range artists {
+		a = strings.TrimSpace(a)
+		if a != "" && !slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, a) }) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// ArtistCredit joins artists for display, shortening long lists:
+// "A, B, C and 9 more".
+func ArtistCredit(artists []string) string {
+	artists = UniqueArtists(artists)
+	if len(artists) <= maxFeatured+1 {
+		return strings.Join(artists, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(artists[:3], ", "), len(artists)-3)
 }
 
 // cleanTitle removes bracketed groups that describe the upload rather than
