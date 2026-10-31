@@ -2,20 +2,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   cancelDownload,
+  getSettings,
   isValidOptions,
   searchVideos,
   startDownload,
+  updateSettings,
   type Video,
 } from "./api";
 
 function mockFetch(status: number, body: unknown) {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue(
-      new Response(body === undefined ? null : JSON.stringify(body), {
-        status,
-      }),
-    );
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(body === undefined ? null : JSON.stringify(body), {
+      status,
+    }),
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -94,14 +94,12 @@ describe("startDownload", () => {
   it("falls back to the status text for non-JSON errors", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response("Bad Gateway", {
-            status: 502,
-            statusText: "Bad Gateway",
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response("Bad Gateway", {
+          status: 502,
+          statusText: "Bad Gateway",
+        }),
+      ),
     );
     await expect(
       startDownload(video, { type: "audio", format: "mp3" }),
@@ -132,5 +130,37 @@ describe("isValidOptions", () => {
     [null, false],
   ])("%j → %s", (value, want) => {
     expect(isValidOptions(value)).toBe(want);
+  });
+});
+
+describe("settings", () => {
+  it("loads the settings", async () => {
+    const settings = {
+      downloadDir: "/downloads",
+      defaultDownloadDir: "/downloads",
+      downloadDirError: "/downloads is not writable: permission denied",
+    };
+    const fetchMock = mockFetch(200, settings);
+    await expect(getSettings()).resolves.toEqual(settings);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings");
+  });
+
+  it("saves the download folder", async () => {
+    const fetchMock = mockFetch(200, {
+      downloadDir: "/media/music",
+      defaultDownloadDir: "/downloads",
+    });
+    await updateSettings("/media/music");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/settings");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({ downloadDir: "/media/music" });
+  });
+
+  it("rejects with the reason a folder can't be used", async () => {
+    mockFetch(400, { error: "/x is not writable: permission denied" });
+    await expect(updateSettings("/x")).rejects.toThrow(
+      "/x is not writable: permission denied",
+    );
   });
 });

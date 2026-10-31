@@ -13,6 +13,9 @@ interface FormProps {
   onSearch: (params: SearchParams) => void;
   /** The server's health, or null while unknown. */
   health: Health | null;
+  /** Why downloads can't be saved, if they can't. */
+  downloadDirError?: string;
+  onOpenSettings: () => void;
 }
 
 interface LimitOption {
@@ -25,7 +28,12 @@ const limitOptions: LimitOption[] = [5, 10, 15, 20, 50].map((value) => ({
   value,
 }));
 
-export default function Form({ onSearch, health }: FormProps) {
+export default function Form({
+  onSearch,
+  health,
+  downloadDirError,
+  onOpenSettings,
+}: FormProps) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(limitOptions[0]);
   const [includeLive, setIncludeLive] = useState(false);
@@ -39,9 +47,11 @@ export default function Form({ onSearch, health }: FormProps) {
   const [statusColor, statusText] =
     health === null
       ? ["bg-gray-400", "Connecting…"]
-      : health.dependencies.ytdlp
-        ? ["bg-green-500", "Ready to download"]
-        : ["bg-red-500", "yt-dlp unavailable on the server"];
+      : !health.dependencies.ytdlp
+        ? ["bg-red-500", "yt-dlp unavailable on the server"]
+        : downloadDirError
+          ? ["bg-amber-500", "Download folder unavailable"]
+          : ["bg-green-500", "Ready to download"];
 
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4 sm:px-6 lg:px-8">
@@ -127,10 +137,26 @@ export default function Form({ onSearch, health }: FormProps) {
         </form>
 
         <div className="mt-10 flex items-center justify-center gap-x-6">
-          <div className="flex items-center gap-x-2 text-sm text-gray-500 dark:text-gray-400 select-none">
-            <span className={`flex h-2 w-2 rounded-full ${statusColor}`}></span>
-            {statusText}
-          </div>
+          {downloadDirError ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              title={downloadDirError}
+              className="flex items-center gap-x-2 text-sm text-amber-600 underline-offset-4 hover:underline dark:text-amber-400"
+            >
+              <span
+                className={`flex h-2 w-2 rounded-full ${statusColor}`}
+              ></span>
+              {statusText}: fix in Settings
+            </button>
+          ) : (
+            <div className="flex items-center gap-x-2 text-sm text-gray-500 dark:text-gray-400 select-none">
+              <span
+                className={`flex h-2 w-2 rounded-full ${statusColor}`}
+              ></span>
+              {statusText}
+            </div>
+          )}
           <div className="h-4 w-px bg-gray-200 dark:bg-white/10"></div>
           <p className="text-sm text-gray-500 dark:text-gray-400 select-none">
             Powered by{" "}

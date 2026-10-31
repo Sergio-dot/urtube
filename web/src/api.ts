@@ -71,6 +71,15 @@ export interface Health {
   dependencies: { ytdlp: boolean; version?: string };
 }
 
+export interface Settings {
+  downloadDir: string;
+  defaultDownloadDir: string;
+  /** The folder a download folder must be inside, if any. */
+  downloadRoot?: string;
+  /** Why downloads can't be saved right now, if they can't. */
+  downloadDirError?: string;
+}
+
 export const EVENTS_URL = "/api/v1/events";
 
 /** An error response from the API, with the server's message. */
@@ -145,4 +154,20 @@ export async function cancelDownload(id: string): Promise<void> {
 
 export function getHealth(): Promise<Health> {
   return request<Health>("/health");
+}
+
+export function getSettings(): Promise<Settings> {
+  return request<Settings>("/settings");
+}
+
+/**
+ * Changes the download folder; an empty string restores the default. Rejects
+ * with the reason if the folder can't be used.
+ */
+export function updateSettings(downloadDir: string): Promise<Settings> {
+  return request<Settings>("/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ downloadDir }),
+  });
 }
