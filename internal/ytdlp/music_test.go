@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -48,7 +49,20 @@ func TestSearcher_SearchMusic_AllLookupsFail(t *testing.T) {
 	s := &Searcher{Executable: fakeExecutable(t, `
 case " $* " in *" --flat-playlist "*) printf 'a\nb\n';; *) echo 'ERROR: Sign in to confirm you are not a bot' >&2; exit 1;; esac`)}
 	_, err := s.SearchMusic(context.Background(), "q", 2)
-	assert.ErrorContains(t, err, "look up songs")
+	assert.ErrorIs(t, err, media.ErrSearchFailed)
+	assert.EqualError(t, err, "search failed: Sign in to confirm you are not a bot")
+}
+
+func TestErrorMessage(t *testing.T) {
+	tests := map[string]string{
+		"exit code 1: exit status 1\n\nERROR: [youtube] BSTsnWoslP4: Sign in to confirm you’re not a bot. This helps protect our community. See https://x": "Sign in to confirm you’re not a bot.",
+		"ERROR: first\nERROR: [youtube:search] HTTP Error 429: Too Many Requests":                                                                          "HTTP Error 429: Too Many Requests",
+		"ERROR: Unable to download webpage: timed out":                                                                                                     "Unable to download webpage: timed out",
+		"exec: yt-dlp: not found": "exec: yt-dlp: not found",
+	}
+	for in, want := range tests {
+		assert.Equal(t, want, errorMessage(errors.New(in)), in)
+	}
 }
 
 func TestSearcher_SearchMusic_SearchFails(t *testing.T) {

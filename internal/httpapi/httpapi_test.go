@@ -563,3 +563,10 @@ func TestSearch_Music(t *testing.T) {
 		"tags": {"artist": "Queen", "title": "Bohemian Rhapsody", "album": "A Night At The Opera", "year": 1975}
 	}]`, w.Body.String())
 }
+
+func TestSearch_SourceFailure(t *testing.T) {
+	h := newTestRouter(t, Deps{Search: &fakeSearcher{err: fmt.Errorf("%w: Sign in to confirm you’re not a bot.", media.ErrSearchFailed)}})
+	w := do(h, http.MethodGet, "/api/v1/search/q?source=music", "")
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Equal(t, "search failed: Sign in to confirm you’re not a bot.", errorMessage(t, w))
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -70,7 +71,7 @@ func (s *Searcher) SearchMusic(ctx context.Context, query string, limit int) ([]
 		}
 	}
 	if len(videos) == 0 && len(ids) > 0 {
-		return nil, fmt.Errorf("look up songs: %w", errors.Join(errs...))
+		return nil, fmt.Errorf("%w: %s", media.ErrSearchFailed, errorMessage(errors.Join(errs...)))
 	}
 	return videos, nil
 }
@@ -86,7 +87,10 @@ func (s *Searcher) musicIDs(ctx context.Context, query string, limit int) ([]str
 		Print("id").
 		Run(ctx, searchURL)
 	if err != nil {
-		return nil, fmt.Errorf("run yt-dlp music search: %w", err)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %s", media.ErrSearchFailed, errorMessage(err))
 	}
 	var ids []string
 	for line := range strings.Lines(result.Stdout) {
@@ -147,4 +151,27 @@ func toSong(songURL string, raw []byte) (media.Video, error) {
 		v.Thumbnails = []media.Thumbnail{{URL: f.Thumbnail}}
 	}
 	return v, nil
+}
+
+// videoIDPrefix matches the "BSTsnWoslP4: " yt-dlp puts before a message.
+var videoIDPrefix = regexp.MustCompile(`^[A-Za-z0-9_-]{11}: `)
+
+// errorMessage returns the first sentence of yt-dlp's last "ERROR:" line in
+// err, without the "[youtube] id:" prefix or links, for showing to users:
+// "Sign in to confirm you’re not a bot." Errors without one are returned
+// whole.
+func errorMessage(err error) string {
+	text := err.Error()
+	i := strings.LastIndex(text, "ERROR: ")
+	if i < 0 {
+		return text
+	}
+	msg, _, _ := strings.Cut(text[i+len("ERROR: "):], "\n")
+	if _, rest, ok := strings.Cut(msg, "]"); ok && strings.HasPrefix(msg, "[") {
+		msg = videoIDPrefix.ReplaceAllString(strings.TrimSpace(rest), "")
+	}
+	if j := strings.Index(msg, ". "); j >= 0 {
+		msg = msg[:j+1]
+	}
+	return strings.TrimSpace(msg)
 }

@@ -17,6 +17,9 @@ var (
 	// ErrVideoUnavailable is returned when a video can't be looked up, e.g.
 	// because it is private or was removed.
 	ErrVideoUnavailable = errors.New("could not read the video")
+	// ErrSearchFailed is returned when the source refused or failed a
+	// search, e.g. YouTube asking to confirm the client isn't a bot.
+	ErrSearchFailed = errors.New("search failed")
 )
 
 // inputError is a validation error whose message is safe to show to clients.

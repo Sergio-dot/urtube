@@ -428,6 +428,11 @@ func TestIntegration(t *testing.T) {
 
 	t.Run("music search", func(t *testing.T) {
 		songs, err := (&Searcher{}).SearchMusic(context.Background(), "queen bohemian rhapsody", 3)
+		if err != nil && strings.Contains(err.Error(), "not a bot") {
+			// GitHub-hosted runners have datacenter IPs, which YouTube Music
+			// asks to sign in; home connections aren't affected.
+			t.Skipf("YouTube bot-checks this machine: %v", err)
+		}
 		require.NoError(t, err)
 		require.NotEmpty(t, songs)
 		assert.True(t, slices.ContainsFunc(songs, func(v media.Video) bool {
