@@ -1,5 +1,8 @@
 # Usage: set LIBRARY_DIR (and PUID/PGID, optionally MEDIA_ROOT) in a .env file
 # next to this one, then
+#   docker compose up -d                          # first start
+#   docker compose pull && docker compose up -d   # update
+# To run your own changes instead of the published image:
 #   docker compose up -d --build
 #
 # Host folders are mounted at the same path inside the container, so the
@@ -7,8 +10,10 @@
 # machine.
 services:
   urtube:
+    # Published by CI from main. IMAGE_TAG pins a version: "1.2.3", or
+    # "sha-<commit>" to roll back to a specific build.
+    image: ghcr.io/sergio-dot/urtube:${IMAGE_TAG:-latest}
     build: .
-    image: urtube:local
     container_name: urtube
     restart: unless-stopped
     # Run as the owner of the library so downloaded files belong to them
