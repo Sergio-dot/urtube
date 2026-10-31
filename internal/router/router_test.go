@@ -81,7 +81,7 @@ func TestNewRouter_Routes(t *testing.T) {
 	})
 
 	t.Run("POST /api/v1/download", func(t *testing.T) {
-		body := []byte(`{"url":"https://example.com"}`)
+		body := []byte(`{"url":"https://example.com","options":{"type":"video","format":"mp4"}}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/download", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

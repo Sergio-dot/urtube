@@ -11,6 +11,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const (
+	// defaultSearchLimit is used when the limit query parameter is missing or invalid.
+	defaultSearchLimit = 5
+	// maxSearchLimit caps how many results a single search may request.
+	maxSearchLimit = 50
+)
+
 // SearchHandler is the handler for the search video request.
 type SearchHandler struct {
 	// Searcher is the searcher used to find videos.
@@ -28,10 +35,10 @@ func (h *SearchHandler) SearchMedia(w http.ResponseWriter, r *http.Request) erro
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "search parameter is required"}
 	}
 
-	limit := 5
+	limit := defaultSearchLimit
 	if l := r.URL.Query().Get("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil {
-			limit = val
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = min(val, maxSearchLimit)
 		}
 	}
 

@@ -29,7 +29,11 @@ func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var body download.DownloadRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	dec := json.NewDecoder(r.Body)
+	// Reject unknown fields so stale clients still sending raw yt-dlp flags
+	// fail loudly instead of having them silently ignored.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		return httputils.APIError{StatusCode: http.StatusBadRequest, Message: "invalid request body"}
 	}
 
@@ -50,6 +54,7 @@ func (h *DownloadHandler) DownloadMedia(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
+// CancelDownload handles the cancel download request.
 func (h *DownloadHandler) CancelDownload(w http.ResponseWriter, r *http.Request) error {
 	if h.Manager == nil {
 		return httputils.APIError{StatusCode: http.StatusInternalServerError, Message: "download manager not available"}

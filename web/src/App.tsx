@@ -144,24 +144,6 @@ function App() {
 
   const performDownload = async (video: Video, options: DownloadOptions) => {
     try {
-      const flags: {
-        post_processing?: Record<string, string | boolean>;
-        video_format?: Record<string, string>;
-      } = {};
-      if (options.type === "audio") {
-        flags.post_processing = {
-          extract_audio: true,
-          audio_format: options.format,
-        };
-      } else {
-        flags.video_format = {
-          format: "bestvideo+bestaudio/best",
-        };
-        flags.post_processing = {
-          recode_video: options.format,
-        };
-      }
-
       const response = await fetch("/api/v1/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,13 +151,13 @@ function App() {
           url: video.url,
           videoId: video.id,
           title: video.title,
-          flags: flags,
+          options,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to start download");
+        throw new Error(errorData.error || "Failed to start download");
       }
 
       const data = await response.json();
@@ -278,7 +260,7 @@ function App() {
             onAddVideo={addToQueue}
             onRemoveVideo={removeFromQueue}
             onDownloadVideo={handleDownloadRequest}
-            onCancelDownload={removeDownload}
+            onCancelDownload={cancelDownload}
             queue={queue}
             downloadStates={videoStatusMap}
           />

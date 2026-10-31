@@ -62,7 +62,8 @@ func TestDownloadMedia(t *testing.T) {
 		h := &DownloadHandler{Manager: mgr}
 
 		body := download.DownloadRequest{
-			URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			URL:     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			Options: download.DownloadOptions{Type: download.MediaAudio, Format: "mp3"},
 		}
 		jsonBody, err := json.Marshal(body)
 		assert.NoError(t, err)
@@ -90,6 +91,34 @@ func TestDownloadMedia(t *testing.T) {
 		err := h.DownloadMedia(w, req)
 
 		assert.Error(t, err)
+		apiErr, ok := err.(httputils.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	})
+
+	t.Run("rejects invalid options", func(t *testing.T) {
+		h := &DownloadHandler{Manager: &mockManager{}}
+
+		body := `{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","options":{"type":"audio","format":"exe"}}`
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadMedia(w, req)
+
+		apiErr, ok := err.(httputils.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	})
+
+	t.Run("rejects raw yt-dlp flags", func(t *testing.T) {
+		h := &DownloadHandler{Manager: &mockManager{}}
+
+		body := `{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","options":{"type":"audio","format":"mp3"},"flags":{"post_processing":{"exec":["id"]}}}`
+		req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+
+		err := h.DownloadMedia(w, req)
+
 		apiErr, ok := err.(httputils.APIError)
 		assert.True(t, ok)
 		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)

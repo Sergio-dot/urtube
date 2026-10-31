@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -129,16 +130,38 @@ func (m *DownloadManager) Unsubscribe(ch chan ProgressUpdate) {
 	}
 }
 
+func isTerminal(status string) bool {
+	return status == statusCancelled || status == statusError || status == statusFinished
+}
+
 func (m *DownloadManager) broadcast(p ProgressUpdate) {
 	m.mux.RLock()
 	defer m.mux.RUnlock()
 	for _, sub := range m.subscribers {
 		select {
 		case sub <- p:
+			continue
 		default:
-			// Dropping progress updates when the subscriber's channel buffer is full
-			// is an intentional design decision to prevent slow or blocked SSE clients
-			// from blocking the main download goroutine.
+		}
+
+		// Dropping progress updates when the subscriber's channel buffer is full
+		// is an intentional design decision to prevent slow or blocked SSE clients
+		// from blocking the main download goroutine.
+		if !isTerminal(p.Status) {
+			continue
+		}
+
+		// A terminal update must reach the client, otherwise its UI never leaves
+		// the downloading state. Make room by discarding the oldest buffered
+		// update, which is almost always a stale progress tick.
+		select {
+		case <-sub:
+		default:
+		}
+		select {
+		case sub <- p:
+		default:
+			slog.Warn("dropped terminal download update", "uuid", p.UUID, "status", p.Status)
 		}
 	}
 }
