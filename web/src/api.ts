@@ -104,6 +104,23 @@ export interface Settings {
   downloadRoot?: string;
   /** Why downloads can't be saved right now, if they can't. */
   downloadDirError?: string;
+  jellyfin: JellyfinSettings;
+}
+
+/** The API key itself is never sent to the browser. */
+export interface JellyfinSettings {
+  url: string;
+  apiKeySet: boolean;
+  /** Libraries are refreshed after downloads: URL and key are set. */
+  enabled: boolean;
+}
+
+/** A change to the settings; absent parts are left as they are. */
+export interface SettingsChange {
+  /** An absolute path; empty restores the default. */
+  downloadDir?: string;
+  /** Without apiKey the saved key is kept; an empty one clears it. */
+  jellyfin?: { url: string; apiKey?: string };
 }
 
 export const EVENTS_URL = "/api/v1/events";
@@ -207,10 +224,29 @@ export function getSettings(): Promise<Settings> {
  * Changes the download folder; an empty string restores the default. Rejects
  * with the reason if the folder can't be used.
  */
-export function updateSettings(downloadDir: string): Promise<Settings> {
+export function updateSettings(change: SettingsChange): Promise<Settings> {
   return request<Settings>("/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ downloadDir }),
+    body: JSON.stringify(change),
   });
+}
+
+/**
+ * Checks a Jellyfin URL and API key (the saved key when apiKey is omitted)
+ * and resolves to a description such as "Connected to Home (Jellyfin …)".
+ */
+export async function testJellyfin(
+  url: string,
+  apiKey?: string,
+): Promise<string> {
+  const { message } = await request<{ message: string }>(
+    "/settings/jellyfin/test",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, apiKey }),
+    },
+  );
+  return message;
 }

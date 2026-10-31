@@ -7,6 +7,7 @@ import {
   searchVideos,
   startDownload,
   suggestTags,
+  testJellyfin,
   updateSettings,
   type Video,
 } from "./api";
@@ -162,7 +163,7 @@ describe("settings", () => {
       downloadDir: "/media/music",
       defaultDownloadDir: "/downloads",
     });
-    await updateSettings("/media/music");
+    await updateSettings({ downloadDir: "/media/music" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/v1/settings");
     expect(init.method).toBe("PUT");
@@ -171,7 +172,7 @@ describe("settings", () => {
 
   it("rejects with the reason a folder can't be used", async () => {
     mockFetch(400, { error: "/x is not writable: permission denied" });
-    await expect(updateSettings("/x")).rejects.toThrow(
+    await expect(updateSettings({ downloadDir: "/x" })).rejects.toThrow(
       "/x is not writable: permission denied",
     );
   });
@@ -215,6 +216,37 @@ describe("music search", () => {
     });
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/search/queen?limit=20&wantLiveStreams=false&source=music",
+    );
+  });
+});
+
+describe("jellyfin", () => {
+  it("sends only the Jellyfin change", async () => {
+    const fetchMock = mockFetch(200, {});
+    await updateSettings({
+      jellyfin: { url: "http://jellyfin:8096", apiKey: "k" },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      jellyfin: { url: "http://jellyfin:8096", apiKey: "k" },
+    });
+  });
+
+  it("tests a connection", async () => {
+    const fetchMock = mockFetch(200, {
+      message: "Connected to Home (Jellyfin 10.11.2)",
+    });
+    await expect(testJellyfin("http://j")).resolves.toBe(
+      "Connected to Home (Jellyfin 10.11.2)",
+    );
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/settings/jellyfin/test");
+    expect(JSON.parse(init.body)).toEqual({ url: "http://j" });
+  });
+
+  it("rejects with the reason", async () => {
+    mockFetch(502, { error: "Jellyfin rejected the API key" });
+    await expect(testJellyfin("http://j", "bad")).rejects.toThrow(
+      "Jellyfin rejected the API key",
     );
   });
 });

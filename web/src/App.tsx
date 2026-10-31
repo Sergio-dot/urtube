@@ -42,7 +42,11 @@ function App() {
   const search = useSearch();
   const queue = useQueue();
   const { downloads, start, cancel, dismiss } = useDownloads();
-  const { settings, refresh: refreshSettings, saveDownloadDir } = useSettings();
+  const {
+    settings,
+    refresh: refreshSettings,
+    save: saveSettings,
+  } = useSettings();
   const [preferences, setPreferences] = useLocalStorage(
     "urtube_download_preferences",
     DEFAULT_OPTIONS,
@@ -194,7 +198,7 @@ function App() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         settings={settings}
-        onSaveDownloadDir={saveDownloadDir}
+        onSave={saveSettings}
       />
 
       <DownloadStatusOverlay

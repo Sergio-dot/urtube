@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { getSettings, updateSettings, type Settings } from "../api";
+import {
+  getSettings,
+  updateSettings,
+  type Settings,
+  type SettingsChange,
+} from "../api";
 
 /** The server's settings, or null until loaded. */
 export function useSettings() {
@@ -23,10 +28,10 @@ export function useSettings() {
     };
   }, []);
 
-  /** Saves a new download folder; rejects with the server's reason. */
-  const saveDownloadDir = useCallback(async (dir: string) => {
-    setSettings(await updateSettings(dir));
+  /** Saves a change; rejects with the server's reason. */
+  const save = useCallback(async (change: SettingsChange) => {
+    setSettings(await updateSettings(change));
   }, []);
 
-  return { settings, refresh, saveDownloadDir };
+  return { settings, refresh, save };
 }

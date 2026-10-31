@@ -9,31 +9,34 @@ import {
   ExclamationTriangleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import type { Settings } from "../api";
+import type { Settings, SettingsChange } from "../api";
+import JellyfinFields from "./JellyfinFields";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: Settings | null;
-  /** Saves the download folder; rejects with the reason it can't be used. */
-  onSaveDownloadDir: (dir: string) => Promise<void>;
+  /** Saves a change; rejects with the reason it can't be applied. */
+  onSave: (change: SettingsChange) => Promise<void>;
 }
 
 export default function SettingsModal({
   isOpen,
   onClose,
   settings,
-  onSaveDownloadDir,
+  onSave,
 }: SettingsModalProps) {
   const [downloadDir, setDownloadDir] = useState(settings?.downloadDir ?? "");
+  const [jellyfinUrl, setJellyfinUrl] = useState(settings?.jellyfin.url ?? "");
+  const [jellyfinKey, setJellyfinKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const save = async (dir: string) => {
+  const save = async (change: SettingsChange) => {
     setSaving(true);
     setError(null);
     try {
-      await onSaveDownloadDir(dir);
+      await onSave(change);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save settings");
@@ -42,9 +45,20 @@ export default function SettingsModal({
     }
   };
 
+  // Only what changed is sent, so a broken download folder doesn't stop
+  // Jellyfin from being saved, and vice versa.
   const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
-    save(downloadDir.trim());
+    const change: SettingsChange = {};
+    if (downloadDir.trim() !== settings?.downloadDir) {
+      change.downloadDir = downloadDir.trim();
+    }
+    const urlChanged = jellyfinUrl.trim() !== (settings?.jellyfin.url ?? "");
+    if (urlChanged || jellyfinKey.trim()) {
+      change.jellyfin = { url: jellyfinUrl.trim() };
+      if (jellyfinKey.trim()) change.jellyfin.apiKey = jellyfinKey.trim();
+    }
+    save(change);
   };
 
   const isDefault =
@@ -143,6 +157,14 @@ export default function SettingsModal({
                 )}
               </div>
 
+              <JellyfinFields
+                saved={settings?.jellyfin}
+                url={jellyfinUrl}
+                onUrlChange={setJellyfinUrl}
+                apiKey={jellyfinKey}
+                onApiKeyChange={setJellyfinKey}
+              />
+
               <div className="mt-8 flex flex-col gap-3 sm:flex-row-reverse">
                 <button
                   type="submit"
@@ -162,10 +184,10 @@ export default function SettingsModal({
                   <button
                     type="button"
                     disabled={saving}
-                    onClick={() => save("")}
+                    onClick={() => save({ downloadDir: "" })}
                     className="inline-flex w-full justify-center rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-white/5 sm:mr-auto sm:w-auto transition-all"
                   >
-                    Use default
+                    Default folder
                   </button>
                 )}
               </div>
