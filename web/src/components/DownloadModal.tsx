@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import type { DownloadOptions, DownloadType } from "../types";
+import { FORMATS, type DownloadOptions, type MediaType } from "../api";
 
 interface DownloadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (options: DownloadOptions) => void;
   title: string;
-  initialOptions?: DownloadOptions;
+  initialOptions: DownloadOptions;
 }
-
-const VIDEO_FORMATS = ["mp4", "mkv", "webm"];
-const AUDIO_FORMATS = ["mp3", "m4a", "wav", "opus"];
 
 export default function DownloadModal({
   isOpen,
@@ -21,14 +23,12 @@ export default function DownloadModal({
   title,
   initialOptions,
 }: DownloadModalProps) {
-  const [type, setType] = useState<DownloadType>(
-    initialOptions?.type || "video",
-  );
-  const [format, setFormat] = useState(initialOptions?.format || "mp4");
+  const [type, setType] = useState(initialOptions.type);
+  const [format, setFormat] = useState(initialOptions.format);
 
-  const handleTypeChange = (newType: DownloadType) => {
+  const handleTypeChange = (newType: MediaType) => {
     setType(newType);
-    setFormat(newType === "video" ? "mp4" : "mp3");
+    setFormat(FORMATS[newType][0]);
   };
 
   const handleConfirm = () => {
@@ -75,6 +75,7 @@ export default function DownloadModal({
                     </label>
                     <div className="mt-2 grid grid-cols-2 gap-3">
                       <button
+                        type="button"
                         onClick={() => handleTypeChange("video")}
                         className={`flex items-center justify-center rounded-xl py-2.5 text-sm font-semibold ring-1 ring-inset transition-all ${
                           type === "video"
@@ -85,6 +86,7 @@ export default function DownloadModal({
                         Video + Audio
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleTypeChange("audio")}
                         className={`flex items-center justify-center rounded-xl py-2.5 text-sm font-semibold ring-1 ring-inset transition-all ${
                           type === "audio"
@@ -103,21 +105,20 @@ export default function DownloadModal({
                       Format
                     </label>
                     <div className="mt-2 grid grid-cols-4 gap-2">
-                      {(type === "video" ? VIDEO_FORMATS : AUDIO_FORMATS).map(
-                        (f) => (
-                          <button
-                            key={f}
-                            onClick={() => setFormat(f)}
-                            className={`flex items-center justify-center rounded-lg py-2 text-xs font-semibold ring-1 ring-inset transition-all ${
-                              format === f
-                                ? "bg-indigo-600/20 text-indigo-400 ring-indigo-500/50"
-                                : "bg-white/5 text-gray-400 ring-white/10 hover:bg-white/10"
-                            }`}
-                          >
-                            {f.toUpperCase()}
-                          </button>
-                        ),
-                      )}
+                      {FORMATS[type].map((f) => (
+                        <button
+                          type="button"
+                          key={f}
+                          onClick={() => setFormat(f)}
+                          className={`flex items-center justify-center rounded-lg py-2 text-xs font-semibold ring-1 ring-inset transition-all ${
+                            format === f
+                              ? "bg-indigo-600/20 text-indigo-400 ring-indigo-500/50"
+                              : "bg-white/5 text-gray-400 ring-white/10 hover:bg-white/10"
+                          }`}
+                        >
+                          {f.toUpperCase()}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>

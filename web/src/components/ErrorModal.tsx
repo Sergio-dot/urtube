@@ -1,5 +1,3 @@
-"use client";
-
 import {
   Dialog,
   DialogBackdrop,
@@ -10,7 +8,7 @@ import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 interface ErrorModalProps {
   open: boolean;
-  onClose: (open: boolean) => void;
+  onClose: () => void;
   title: string;
   message: string;
 }
@@ -22,7 +20,7 @@ export default function ErrorModal({
   message,
 }: ErrorModalProps) {
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-10">
+    <Dialog open={open} onClose={() => onClose()} className="relative z-10">
       <DialogBackdrop
         transition
         className="fixed inset-0 bg-gray-900/50 transition-opacity data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in"
@@ -50,7 +48,9 @@ export default function ErrorModal({
                     {title}
                   </DialogTitle>
                   <div className="mt-2">
-                    <p className="text-sm text-gray-400">{message}</p>
+                    <p className="text-sm whitespace-pre-line text-gray-400">
+                      {message}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -58,7 +58,7 @@ export default function ErrorModal({
             <div className="bg-gray-700/25 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
               <button
                 type="button"
-                onClick={() => onClose(false)}
+                onClick={() => onClose()}
                 className="inline-flex w-full justify-center rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white inset-ring inset-ring-white/5 hover:bg-white/20 sm:ml-3 sm:w-auto"
               >
                 Close

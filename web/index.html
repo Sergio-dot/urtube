@@ -17,17 +17,7 @@
             window.matchMedia("(prefers-color-scheme: dark)").matches === true;
           const isDark = theme === "dark" || (!theme && supportDarkMode);
 
-          if (isDark) {
-            document.documentElement.classList.add("dark");
-
-            document.documentElement.style.background;
-            Color = "#020617";
-          } else {
-            document.documentElement.classList.remove("dark");
-
-            document.documentElement.style.background;
-            Color = "#ffffff";
-          }
+          document.documentElement.classList.toggle("dark", isDark);
         } catch (e) {}
       })();
     </script>
