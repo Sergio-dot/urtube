@@ -114,6 +114,9 @@ jobs:
           tags: urtube:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # The weekly run rebuilds the runtime stage: a cached layer would
+          # keep the Debian packages from when it was first built.
+          no-cache-filters: ${{ github.event_name == 'schedule' && 'runtime' || '' }}
 
       - name: Smoke test
         run: |
@@ -152,6 +155,7 @@ jobs:
           platforms: linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          no-cache-filters: ${{ github.event_name == 'schedule' && 'runtime' || '' }}
 
   # Pushes the image to ghcr.io/sergio-dot/urtube once everything above has
   # passed: for main (also on the weekly run, which picks up Debian security
@@ -200,3 +204,4 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          no-cache-filters: ${{ github.event_name == 'schedule' && 'runtime' || '' }}

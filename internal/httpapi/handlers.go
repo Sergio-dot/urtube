@@ -111,7 +111,9 @@ func (a *api) updateSettings(w http.ResponseWriter, r *http.Request) error {
 }
 
 // testJellyfin handles POST /api/v1/settings/jellyfin/test: it checks a URL
-// and API key before they are saved. Without apiKey, the saved key is used.
+// and API key before they are saved. Without apiKey, the saved key is used,
+// but only for the server it was saved for: it must never reach a URL chosen
+// by whoever is calling.
 func (a *api) testJellyfin(w http.ResponseWriter, r *http.Request) error {
 	var body jellyfinRequest
 	dec := json.NewDecoder(r.Body)
@@ -120,11 +122,13 @@ func (a *api) testJellyfin(w http.ResponseWriter, r *http.Request) error {
 		return statusError{status: http.StatusBadRequest, msg: "invalid request body"}
 	}
 
-	_, key := a.Settings.Jellyfin()
+	url := strings.TrimSpace(body.URL)
+	var key string
 	if body.APIKey != nil {
 		key = strings.TrimSpace(*body.APIKey)
+	} else if savedURL, savedKey := a.Settings.Jellyfin(); strings.TrimRight(url, "/") == strings.TrimRight(savedURL, "/") {
+		key = savedKey
 	}
-	url := strings.TrimSpace(body.URL)
 	if url == "" || key == "" {
 		return statusError{status: http.StatusBadRequest, msg: "enter the Jellyfin URL and API key first"}
 	}

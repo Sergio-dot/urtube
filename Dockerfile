@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # the one yt-dlp enables by default.
 FROM denoland/deno:bin-2.9.8@sha256:b507583d3c68ba69f3ed2ce5969ae5b8b70f43421c781279c7aea06435263543 AS deno
 
-FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime
 
 # yt-dlp breaks whenever YouTube changes, so bump these together often: the
 # checksum is the "yt-dlp" line of the release's SHA2-256SUMS file.
@@ -40,9 +40,12 @@ ARG YTDLP_SHA256=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf
 # it embed cover art in M4A and Opus files; tini reaps the ffmpeg processes
 # orphaned when a cancelled download's process group is killed.
 # Versions come from the Debian release: pinning exact ones breaks the build
-# as soon as a security update replaces them.
+# as soon as a security update replaces them. The upgrade applies security
+# updates to packages already in the pinned base image, which install leaves
+# alone.
 # hadolint ignore=DL3008
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-mutagen tini \
     && rm -rf /var/lib/apt/lists/*
 

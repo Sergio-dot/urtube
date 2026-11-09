@@ -173,7 +173,7 @@ func TestStore(t *testing.T) {
 		assert.Equal(t, "http://jellyfin:8096", url, "trailing slash dropped")
 		assert.Equal(t, "abc123", key)
 
-		require.NoError(t, reopened.SetJellyfin("http://other:8096", nil))
+		require.NoError(t, reopened.SetJellyfin("http://jellyfin:8096/", nil))
 		_, key = reopened.Jellyfin()
 		assert.Equal(t, "abc123", key, "a nil key keeps the saved one")
 
@@ -182,6 +182,40 @@ func TestStore(t *testing.T) {
 		url, key = reopened.Jellyfin()
 		assert.Empty(t, url)
 		assert.Empty(t, key)
+	})
+
+	t.Run("a stored Jellyfin key stays with its server", func(t *testing.T) {
+		empty, typed := "", "newkey"
+
+		s, err := Open(t.TempDir(), Defaults{})
+		require.NoError(t, err)
+		saved := "abc123"
+		require.NoError(t, s.SetJellyfin("http://jellyfin:8096", &saved))
+
+		assert.ErrorIs(t, s.SetJellyfin("http://evil:8096", nil), media.ErrInvalidInput)
+		url, key := s.Jellyfin()
+		assert.Equal(t, "http://jellyfin:8096", url, "the rejected URL isn't saved")
+		assert.Equal(t, "abc123", key)
+
+		// Clearing the URL first must not open a way around the check.
+		require.NoError(t, s.SetJellyfin("", nil))
+		assert.ErrorIs(t, s.SetJellyfin("http://evil:8096", nil), media.ErrInvalidInput)
+
+		require.NoError(t, s.SetJellyfin("http://other:8096", &typed), "a new key may go to a new server")
+		url, key = s.Jellyfin()
+		assert.Equal(t, "http://other:8096", url)
+		assert.Equal(t, "newkey", key)
+
+		env, err := Open(t.TempDir(), Defaults{JellyfinURL: "http://env:8096/", JellyfinAPIKey: "envkey"})
+		require.NoError(t, err)
+		assert.ErrorIs(t, env.SetJellyfin("http://evil:8096", nil), media.ErrInvalidInput, "the key from the environment too")
+		assert.ErrorIs(t, env.SetJellyfin("http://evil:8096", &empty), media.ErrInvalidInput, "an empty key falls back to the environment's")
+		require.NoError(t, env.SetJellyfin("http://env:8096", nil), "same server as the default")
+
+		none, err := Open(t.TempDir(), Defaults{})
+		require.NoError(t, err)
+		require.NoError(t, none.SetJellyfin("http://first:8096", nil), "no key to protect yet")
+		require.NoError(t, none.SetJellyfin("http://second:8096", nil))
 	})
 
 	t.Run("invalid Jellyfin settings", func(t *testing.T) {

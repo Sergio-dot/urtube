@@ -133,9 +133,45 @@ func do(h http.Handler, method, target, body string) *httptest.ResponseRecorder 
 	if body != "" {
 		r = strings.NewReader(body)
 	}
+	req := httptest.NewRequest(method, target, r)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(method, target, r))
+	h.ServeHTTP(w, req)
 	return w
+}
+
+func TestContentType(t *testing.T) {
+	body := `{"url": "http://jellyfin:8096", "apiKey": "k"}`
+	called := false
+	h := newTestRouter(t, Deps{
+		Settings: &fakeSettings{},
+		CheckJellyfin: func(context.Context, string, string) (string, error) {
+			called = true
+			return "Home", nil
+		},
+	})
+	send := func(method, target, contentType string) int {
+		req := httptest.NewRequest(method, target, strings.NewReader(body))
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	// The types a cross-site page can send without a CORS preflight.
+	for _, contentType := range []string{"", "text/plain", "application/x-www-form-urlencoded", "multipart/form-data"} {
+		assert.Equal(t, http.StatusUnsupportedMediaType, send(http.MethodPost, "/api/v1/settings/jellyfin/test", contentType), contentType)
+		assert.Equal(t, http.StatusUnsupportedMediaType, send(http.MethodPost, "/api/v1/download", contentType), contentType)
+		assert.Equal(t, http.StatusUnsupportedMediaType, send(http.MethodPut, "/api/v1/settings", contentType), contentType)
+	}
+	assert.False(t, called, "rejected before reaching the handler")
+
+	assert.Equal(t, http.StatusOK, send(http.MethodPost, "/api/v1/settings/jellyfin/test", "application/json; charset=utf-8"))
+	assert.True(t, called)
 }
 
 func errorMessage(t *testing.T, w *httptest.ResponseRecorder) string {
@@ -624,9 +660,27 @@ func TestJellyfinTest(t *testing.T) {
 		}
 	}
 
+	t.Run("never sends the saved key to another server", func(t *testing.T) {
+		var url, key string
+		h := newTestRouter(t, Deps{
+			Settings:      &fakeSettings{jellyfinURL: "http://jellyfin:8096", jellyfinKey: "saved"},
+			CheckJellyfin: check(&url, &key, nil),
+		})
+
+		w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": "http://evil:8096"}`)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Empty(t, url, "Jellyfin isn't contacted")
+		assert.Empty(t, key)
+
+		w = do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": "http://jellyfin:8096/"}`)
+		assert.Equal(t, http.StatusOK, w.Code, "a trailing slash is the same server")
+		assert.Equal(t, "saved", key)
+	})
+
 	t.Run("uses the saved key unless one is given", func(t *testing.T) {
 		var url, key string
-		h := newTestRouter(t, Deps{Settings: &fakeSettings{jellyfinKey: "saved"}, CheckJellyfin: check(&url, &key, nil)})
+		h := newTestRouter(t, Deps{Settings: &fakeSettings{jellyfinURL: "http://jellyfin:8096", jellyfinKey: "saved"}, CheckJellyfin: check(&url, &key, nil)})
 
 		w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", `{"url": " http://jellyfin:8096 "}`)
 

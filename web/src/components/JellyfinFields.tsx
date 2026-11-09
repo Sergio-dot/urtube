@@ -26,6 +26,11 @@ export default function JellyfinFields({
     null,
   );
 
+  // The server only uses a saved key with the server it was saved for.
+  const canUseSavedKey =
+    saved?.apiKeySet &&
+    url.trim().replace(/\/+$/, "") === saved.url.replace(/\/+$/, "");
+
   const test = async () => {
     setTesting(true);
     setResult(null);
@@ -103,7 +108,7 @@ export default function JellyfinFields({
           setResult(null);
         }}
         placeholder={
-          saved?.apiKeySet ? "Saved: leave empty to keep it" : "Paste the key"
+          canUseSavedKey ? "Saved: leave empty to keep it" : "Paste the key"
         }
         className={inputClass}
       />
@@ -113,7 +118,7 @@ export default function JellyfinFields({
           type="button"
           onClick={test}
           disabled={
-            testing || !url.trim() || !(apiKey.trim() || saved?.apiKeySet)
+            testing || !url.trim() || !(apiKey.trim() || canUseSavedKey)
           }
           className="rounded-lg px-3 py-1.5 text-sm font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-500/30 hover:bg-indigo-50 disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-white/5"
         >

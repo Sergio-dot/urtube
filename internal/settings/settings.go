@@ -156,7 +156,13 @@ func (s *Store) SetDownloadDir(dir string) error {
 func (s *Store) Jellyfin() (url, apiKey string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	url, apiKey = s.saved.JellyfinURL, s.saved.JellyfinAPIKey
+	return s.effectiveJellyfin(s.saved)
+}
+
+// effectiveJellyfin returns the Jellyfin URL and API key v results in, once
+// the defaults fill in what it leaves empty.
+func (s *Store) effectiveJellyfin(v saved) (url, apiKey string) {
+	url, apiKey = v.JellyfinURL, v.JellyfinAPIKey
 	if url == "" {
 		url = s.defaultJellyfinURL
 	}
@@ -167,7 +173,9 @@ func (s *Store) Jellyfin() (url, apiKey string) {
 }
 
 // SetJellyfin saves the Jellyfin URL and, unless apiKey is nil, the API
-// key. Empty values go back to the defaults from the environment.
+// key. Empty values go back to the defaults from the environment. Moving to
+// a different server requires a new key, so that a key already stored is
+// never sent to a URL chosen by whoever is changing the settings.
 func (s *Store) SetJellyfin(url string, apiKey *string) error {
 	url, err := ValidJellyfinURL(url)
 	if err != nil {
@@ -188,6 +196,14 @@ func (s *Store) SetJellyfin(url string, apiKey *string) error {
 	if apiKey != nil {
 		next.JellyfinAPIKey = *apiKey
 	}
+
+	currentURL, _ := s.effectiveJellyfin(s.saved)
+	_, nextKey := s.effectiveJellyfin(next)
+	newKey := apiKey != nil && *apiKey != ""
+	if url != "" && url != strings.TrimRight(currentURL, "/") && nextKey != "" && !newKey {
+		return media.InvalidInput("enter the API key again to use a different Jellyfin server")
+	}
+
 	if err := s.writeLocked(next); err != nil {
 		return err
 	}

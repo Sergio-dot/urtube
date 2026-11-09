@@ -233,7 +233,8 @@ export function updateSettings(change: SettingsChange): Promise<Settings> {
 }
 
 /**
- * Checks a Jellyfin URL and API key (the saved key when apiKey is omitted)
+ * Checks a Jellyfin URL and API key (when apiKey is omitted, the saved key,
+ * which the server only uses if url is the saved server)
  * and resolves to a description such as "Connected to Home (Jellyfin …)".
  */
 export async function testJellyfin(
