@@ -6,7 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-chi/httplog/v2 v2.1.1
 	github.com/google/uuid v1.6.0
-	github.com/lrstanley/go-ytdlp v1.5.5
+	github.com/lrstanley/go-ytdlp v1.5.6
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.43.0
