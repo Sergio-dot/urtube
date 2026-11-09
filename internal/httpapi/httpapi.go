@@ -77,6 +77,9 @@ type Deps struct {
 // requestTimeout bounds API requests other than the event stream.
 const requestTimeout = 30 * time.Second
 
+// maxRequestBody bounds API request bodies, which are small JSON documents.
+const maxRequestBody = 1 << 20
+
 type api struct {
 	Deps
 	keepAlive time.Duration
@@ -120,6 +123,7 @@ func newRouter(a *api) http.Handler {
 			// preflight, but not application/json ones, so this stops other
 			// sites from driving the API through a visitor's browser.
 			r.Use(middleware.AllowContentType("application/json"))
+			r.Use(middleware.RequestSize(maxRequestBody))
 			r.Get("/search/{query}", handle(a.search))
 			r.Get("/tags", handle(a.suggestTags))
 			r.Post("/download", handle(a.startDownload))

@@ -28,7 +28,18 @@ func TestRequestValidate(t *testing.T) {
 		{name: "unknown media type", url: validURL, options: Options{Type: "exec", Format: "mp4"}, expectedError: ErrInvalidMediaType},
 		{name: "format not allowed for type", url: validURL, options: Options{Type: MediaAudio, Format: "mp4"}, expectedError: ErrInvalidFormat},
 		{name: "valid video request", url: validURL, options: videoMP4},
-		{name: "valid audio request", url: "http://example.com/v", options: Options{Type: MediaAudio, Format: "mp3"}},
+		{name: "valid audio request", url: "http://youtu.be/v", options: Options{Type: MediaAudio, Format: "mp3"}},
+		{name: "music host", url: "https://music.youtube.com/watch?v=a1", options: videoMP4},
+		{name: "host case is ignored", url: "https://WWW.YouTube.com/watch?v=a1", options: videoMP4},
+		{name: "other site", url: "https://example.com/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "LAN address", url: "http://192.168.1.10:8096/", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "localhost", url: "http://localhost/", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "lookalike domain", url: "https://youtube.com.evil.example/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "unlisted subdomain", url: "https://evil.youtube.com/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "allowed host as user info", url: "https://www.youtube.com@evil.example/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "user info on allowed host", url: "https://user@www.youtube.com/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "port on allowed host", url: "https://www.youtube.com:8443/v", options: videoMP4, expectedError: ErrUnsupportedHost},
+		{name: "backslash trick", url: `https://www.youtube.com\@evil.example/v`, options: videoMP4, expectedError: ErrInvalidURL},
 	}
 
 	for _, tt := range tests {
@@ -179,7 +190,7 @@ func blockingFetcher(release <-chan struct{}) *fakeFetcher {
 }
 
 var validRequest = Request{
-	URL:     "https://example.com/v",
+	URL:     "https://www.youtube.com/v",
 	VideoID: "v1",
 	Title:   "Song",
 	Options: Options{Type: MediaAudio, Format: "mp3"},

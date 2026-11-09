@@ -5,6 +5,10 @@ with [yt-dlp](https://github.com/yt-dlp/yt-dlp), straight into a folder such
 as a Jellyfin library. It's a single Go binary with the React UI embedded,
 meant for one household: one instance, no accounts.
 
+**Keep it on a trusted network.** urtube has no login: anyone who can reach
+it can save files into your library and change its settings. Don't expose it
+to the internet without an authenticating reverse proxy in front of it.
+
 ## Running with Docker Compose
 
 1. Pick the folder downloads should go to. It must already exist (Docker

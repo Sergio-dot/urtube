@@ -98,9 +98,20 @@ func (r Request) Validate() error {
 	return r.Tags.Validate()
 }
 
-// validateURL accepts absolute http(s) URLs only. Sources pass the URL to a
-// command line, so requiring the scheme also keeps it from being read as a
-// flag.
+// allowedHosts are the hosts videos can be downloaded from. yt-dlp fetches
+// whatever it is given from inside the network urtube runs on, so an open
+// list would let anyone who can reach urtube probe other hosts on that network.
+var allowedHosts = []string{
+	"youtube.com",
+	"www.youtube.com",
+	"m.youtube.com",
+	"music.youtube.com",
+	"youtu.be",
+}
+
+// validateURL accepts absolute http(s) URLs on allowedHosts only. Sources pass
+// the URL to a command line, so requiring the scheme also keeps it from being
+// read as a flag.
 func validateURL(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return ErrURLRequired
@@ -108,6 +119,9 @@ func validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return ErrInvalidURL
+	}
+	if u.User != nil || u.Port() != "" || !slices.Contains(allowedHosts, strings.ToLower(u.Hostname())) {
+		return ErrUnsupportedHost
 	}
 	return nil
 }

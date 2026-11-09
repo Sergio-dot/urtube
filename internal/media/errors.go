@@ -38,6 +38,7 @@ var (
 	ErrQueryRequired    error = inputError("search query is required")
 	ErrURLRequired      error = inputError("url is required")
 	ErrInvalidURL       error = inputError("url must be an absolute http or https URL")
+	ErrUnsupportedHost  error = inputError("only YouTube URLs can be downloaded")
 	ErrInvalidMediaType error = inputError("options.type must be one of: video, audio")
 	ErrInvalidFormat    error = inputError("unsupported format")
 	ErrInvalidSource    error = inputError("source must be one of: videos, music")
