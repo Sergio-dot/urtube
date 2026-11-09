@@ -40,9 +40,12 @@ ARG YTDLP_SHA256=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf
 # it embed cover art in M4A and Opus files; tini reaps the ffmpeg processes
 # orphaned when a cancelled download's process group is killed.
 # Versions come from the Debian release: pinning exact ones breaks the build
-# as soon as a security update replaces them.
+# as soon as a security update replaces them. The upgrade applies security
+# updates to packages already in the pinned base image, which install leaves
+# alone.
 # hadolint ignore=DL3008
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-mutagen tini \
     && rm -rf /var/lib/apt/lists/*
 
