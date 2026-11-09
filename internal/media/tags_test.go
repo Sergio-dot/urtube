@@ -274,7 +274,7 @@ func TestSuggestService(t *testing.T) {
 
 	t.Run("guesses tags and lists artists", func(t *testing.T) {
 		svc := NewSuggestService(&fakeFetcher{info: VideoInfo{Title: "Queen - Bohemian Rhapsody"}}, fixedDir{dir: lib})
-		got, err := svc.Suggest(context.Background(), "https://example.com/v")
+		got, err := svc.Suggest(context.Background(), "https://www.youtube.com/v")
 		require.NoError(t, err)
 		assert.Equal(t, Tags{Artist: "Queen", Title: "Bohemian Rhapsody"}, got.Tags)
 		assert.Equal(t, []string{"ABBA", "Queen"}, got.KnownArtists)
@@ -282,7 +282,7 @@ func TestSuggestService(t *testing.T) {
 
 	t.Run("an unusable folder only drops the artist list", func(t *testing.T) {
 		svc := NewSuggestService(&fakeFetcher{info: VideoInfo{Title: "Song"}}, fixedDir{err: errors.New("not writable")})
-		got, err := svc.Suggest(context.Background(), "https://example.com/v")
+		got, err := svc.Suggest(context.Background(), "https://www.youtube.com/v")
 		require.NoError(t, err)
 		assert.Nil(t, got.KnownArtists)
 	})
@@ -295,7 +295,7 @@ func TestSuggestService(t *testing.T) {
 
 	t.Run("lookup failures are ErrVideoUnavailable", func(t *testing.T) {
 		svc := NewSuggestService(&fakeFetcher{inspectErr: errors.New("Private video")}, testDest)
-		_, err := svc.Suggest(context.Background(), "https://example.com/v")
+		_, err := svc.Suggest(context.Background(), "https://www.youtube.com/v")
 		assert.ErrorIs(t, err, ErrVideoUnavailable)
 		assert.EqualError(t, err, "could not read the video: Private video")
 	})

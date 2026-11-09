@@ -181,6 +181,29 @@ func errorMessage(t *testing.T, w *httptest.ResponseRecorder) string {
 	return resp.Error
 }
 
+func TestRequestSize(t *testing.T) {
+	called := false
+	h := newTestRouter(t, Deps{
+		Settings: &fakeSettings{},
+		CheckJellyfin: func(context.Context, string, string) (string, error) {
+			called = true
+			return "Home", nil
+		},
+	})
+	body := func(padding int) string {
+		return `{"url": "http://j", "apiKey": "` + strings.Repeat("k", padding) + `"}`
+	}
+
+	w := do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", body(maxRequestBody))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "invalid request body", errorMessage(t, w))
+	assert.False(t, called, "rejected before reaching Jellyfin")
+
+	w = do(h, http.MethodPost, "/api/v1/settings/jellyfin/test", body(1000))
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, called)
+}
+
 func TestErrorStatus(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -308,7 +331,7 @@ func TestCancelDownload(t *testing.T) {
 	})
 
 	t.Run("active download is cancelled", func(t *testing.T) {
-		d, err := svc.Start(media.Request{URL: "https://example.com/v", Options: media.Options{Type: media.MediaAudio, Format: "mp3"}})
+		d, err := svc.Start(media.Request{URL: "https://www.youtube.com/v", Options: media.Options{Type: media.MediaAudio, Format: "mp3"}})
 		assert.NoError(t, err)
 
 		w := do(h, http.MethodDelete, "/api/v1/download/"+d.ID, "")
@@ -333,8 +356,8 @@ func TestEvents(t *testing.T) {
 	t.Run("sends active downloads on connect", func(t *testing.T) {
 		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
 		t.Cleanup(func() { drainNow(svc) })
-		running, _ := svc.Start(media.Request{URL: "https://example.com/1", Title: "One", Options: audio})
-		queued, _ := svc.Start(media.Request{URL: "https://example.com/2", Title: "Two", Options: audio})
+		running, _ := svc.Start(media.Request{URL: "https://www.youtube.com/1", Title: "One", Options: audio})
+		queued, _ := svc.Start(media.Request{URL: "https://www.youtube.com/2", Title: "Two", Options: audio})
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 		defer cancel()
@@ -359,7 +382,7 @@ func TestEvents(t *testing.T) {
 
 	t.Run("ends when the service drains", func(t *testing.T) {
 		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 1)
-		d, _ := svc.Start(media.Request{URL: "https://example.com/1", Options: audio})
+		d, _ := svc.Start(media.Request{URL: "https://www.youtube.com/1", Options: audio})
 
 		done := make(chan *httptest.ResponseRecorder, 1)
 		go func() {
@@ -536,7 +559,7 @@ func TestSettings(t *testing.T) {
 		t.Cleanup(func() { drainNow(svc) })
 		h := newTestRouter(t, Deps{Downloads: svc, Settings: settings})
 
-		w := do(h, http.MethodPost, "/api/v1/download", `{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"}}`)
+		w := do(h, http.MethodPost, "/api/v1/download", `{"url":"https://www.youtube.com/v","options":{"type":"audio","format":"mp3"}}`)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 		assert.Equal(t, "download folder unavailable: /downloads is not writable: permission denied", errorMessage(t, w))
@@ -563,13 +586,13 @@ func TestSuggestTags(t *testing.T) {
 
 	t.Run("no known artists is an empty list", func(t *testing.T) {
 		h := newTestRouter(t, Deps{Suggest: &fakeSuggester{}})
-		w := do(h, http.MethodGet, "/api/v1/tags?url=https://example.com/v", "")
+		w := do(h, http.MethodGet, "/api/v1/tags?url=https://www.youtube.com/v", "")
 		assert.Contains(t, w.Body.String(), `"knownArtists":[]`)
 	})
 
 	t.Run("unavailable videos are 502 with the reason", func(t *testing.T) {
 		h := newTestRouter(t, Deps{Suggest: &fakeSuggester{err: fmt.Errorf("%w: Private video", media.ErrVideoUnavailable)}})
-		w := do(h, http.MethodGet, "/api/v1/tags?url=https://example.com/v", "")
+		w := do(h, http.MethodGet, "/api/v1/tags?url=https://www.youtube.com/v", "")
 		assert.Equal(t, http.StatusBadGateway, w.Code)
 		assert.Equal(t, "could not read the video: Private video", errorMessage(t, w))
 	})
@@ -585,7 +608,7 @@ func TestStartDownload_Tags(t *testing.T) {
 	t.Run("invalid tags are 400", func(t *testing.T) {
 		h := newTestRouter(t, Deps{})
 		w := do(h, http.MethodPost, "/api/v1/download",
-			`{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"a\nb"}}`)
+			`{"url":"https://www.youtube.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"a\nb"}}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Equal(t, "tags.artist must not contain control characters", errorMessage(t, w))
 	})
@@ -593,7 +616,7 @@ func TestStartDownload_Tags(t *testing.T) {
 	t.Run("tags are accepted", func(t *testing.T) {
 		h := newTestRouter(t, Deps{})
 		w := do(h, http.MethodPost, "/api/v1/download",
-			`{"url":"https://example.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"Queen","title":"Song","album":"","year":1975}}`)
+			`{"url":"https://www.youtube.com/v","options":{"type":"audio","format":"mp3"},"tags":{"artist":"Queen","title":"Song","album":"","year":1975}}`)
 		assert.Equal(t, http.StatusAccepted, w.Code)
 	})
 }
