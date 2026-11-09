@@ -116,6 +116,10 @@ func newRouter(a *api) http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(requestTimeout))
+			// Web pages can send other sites text/plain POSTs without a CORS
+			// preflight, but not application/json ones, so this stops other
+			// sites from driving the API through a visitor's browser.
+			r.Use(middleware.AllowContentType("application/json"))
 			r.Get("/search/{query}", handle(a.search))
 			r.Get("/tags", handle(a.suggestTags))
 			r.Post("/download", handle(a.startDownload))

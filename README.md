@@ -89,7 +89,9 @@ downloads has finished, so new songs show up without waiting for the next
 scheduled scan. It's off until both are set, and failures are only logged.
 From the urtube container, Jellyfin is usually `http://<host-ip>:8096`, or
 `http://jellyfin:8096` when both containers share a Docker network. The key
-is kept in the `data` volume and never sent back to the browser.
+is kept in the `data` volume and never sent back to the browser. Changing the
+server URL requires entering the key again, so a saved key only ever goes to
+the server it was saved for.
 
 **Updating yt-dlp.** YouTube changes often break older yt-dlp releases. The
 image pins yt-dlp with `YTDLP_VERSION` and `YTDLP_SHA256` in the `Dockerfile`.
