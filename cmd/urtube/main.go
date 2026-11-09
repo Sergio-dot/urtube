@@ -18,6 +18,7 @@ import (
 	"github.com/Sergio-dot/urtube/internal/httpapi"
 	"github.com/Sergio-dot/urtube/internal/jellyfin"
 	"github.com/Sergio-dot/urtube/internal/media"
+	"github.com/Sergio-dot/urtube/internal/musicbrainz"
 	"github.com/Sergio-dot/urtube/internal/server"
 	"github.com/Sergio-dot/urtube/internal/settings"
 	"github.com/Sergio-dot/urtube/internal/ui"
@@ -100,11 +101,17 @@ func run() error {
 	// Does nothing until a Jellyfin URL and API key are set.
 	downloads.SetLibraryNotifier(jellyfin.Notifier{Config: store.Jellyfin})
 
+	// One client for both, as the rate limit covers all its requests.
+	albums := musicbrainz.New()
+	downloads.SetAlbumFinder(albums)
+	suggest := media.NewSuggestService(fetcher, store)
+	suggest.SetAlbumFinder(albums)
+
 	var shuttingDown atomic.Bool
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Search:    media.NewSearchService(&ytdlp.Searcher{}),
 		Downloads: downloads,
-		Suggest:   media.NewSuggestService(fetcher, store),
+		Suggest:   suggest,
 		Settings:  store,
 		CheckJellyfin: func(ctx context.Context, url, apiKey string) (string, error) {
 			return jellyfin.Client{URL: url, APIKey: apiKey}.Check(ctx)

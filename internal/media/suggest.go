@@ -21,6 +21,13 @@ type Suggestion struct {
 type SuggestService struct {
 	inspector   Inspector
 	destination Destination
+	albums      AlbumFinder
+}
+
+// SetAlbumFinder makes suggestions use the album finder knows. Call it before
+// the first Suggest.
+func (s *SuggestService) SetAlbumFinder(f AlbumFinder) {
+	s.albums = f
 }
 
 // NewSuggestService creates a SuggestService that looks videos up with
@@ -44,7 +51,7 @@ func (s *SuggestService) Suggest(ctx context.Context, url string) (Suggestion, e
 		return Suggestion{}, fmt.Errorf("%w: %w", ErrVideoUnavailable, err)
 	}
 
-	sug := Suggestion{Tags: GuessTags(info)}
+	sug := Suggestion{Tags: correctAlbum(ctx, s.albums, GuessTags(info))}
 	if dir, err := s.destination.DownloadDir(); err == nil {
 		sug.KnownArtists = KnownArtists(os.DirFS(dir), maxKnownArtists)
 	}

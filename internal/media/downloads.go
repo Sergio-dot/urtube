@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ type DownloadService struct {
 	destination   Destination
 	maxConcurrent int
 	notifier      LibraryNotifier
+	albums        AlbumFinder
 
 	mu          sync.Mutex
 	jobs        map[string]*job // queued and running downloads
@@ -58,6 +60,12 @@ func (s *DownloadService) SetLibraryNotifier(n LibraryNotifier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notifier = n
+}
+
+// SetAlbumFinder makes audio downloads with no album chosen by the client use
+// the album f knows. Call it before starting downloads.
+func (s *DownloadService) SetAlbumFinder(f AlbumFinder) {
+	s.albums = f
 }
 
 // NewDownloadService creates a DownloadService that saves downloads where
@@ -158,6 +166,10 @@ func (s *DownloadService) fetch(j *job) error {
 	tags := j.req.Tags.Or(GuessTags(info))
 	audio := j.req.Options.Type == MediaAudio
 	if audio {
+		// An album the user chose is theirs to decide.
+		if strings.TrimSpace(j.req.Tags.Album) == "" {
+			tags = correctAlbum(j.ctx, s.albums, tags)
+		}
 		tags = MatchLibrary(lib, tags)
 	}
 	job := FetchJob{
