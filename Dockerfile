@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # the one yt-dlp enables by default.
 FROM denoland/deno:bin-2.9.8@sha256:b507583d3c68ba69f3ed2ce5969ae5b8b70f43421c781279c7aea06435263543 AS deno
 
-FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime
 
 # yt-dlp breaks whenever YouTube changes, so bump these together often: the
 # checksum is the "yt-dlp" line of the release's SHA2-256SUMS file.
