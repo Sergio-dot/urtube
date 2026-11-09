@@ -78,6 +78,11 @@ them (Download all uses the guesses):
   main artist's folder; "&" and "," are left alone (Simon & Garfunkel).
 - An existing artist or album folder that differs only by case or spacing is
   reused, and the tags take its spelling.
+- YouTube often names a song's single as its album. urtube looks the artist
+  and title up in [MusicBrainz](https://musicbrainz.org) and uses the earliest
+  studio album it finds, ignoring compilations and live albums. An album you
+  type is never replaced, and if MusicBrainz has no match or can't be reached,
+  YouTube's album is kept.
 
 The tags (title, artist, album artist, album, year) and the thumbnail,
 cropped square as cover art, are embedded in the file, which is what
