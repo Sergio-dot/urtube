@@ -8,3 +8,12 @@ export function formatDuration(seconds: number): string {
     ? `${hrs}:${String(mins).padStart(2, "0")}:${secs}`
     : `${mins}:${secs}`;
 }
+
+/**
+ * The number in a progress string such as "42.5%", limited to 0–100, or
+ * undefined when there is none (the server sends "" while it is unknown).
+ */
+export function percentValue(percent: string): number | undefined {
+  const value = Number.parseFloat(percent);
+  return Number.isNaN(value) ? undefined : Math.min(100, Math.max(0, value));
+}

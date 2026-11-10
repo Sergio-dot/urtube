@@ -10,9 +10,6 @@ interface JellyfinFieldsProps {
   onApiKeyChange: (key: string) => void;
 }
 
-const inputClass =
-  "mt-2 block w-full rounded-xl border-0 px-3 py-2.5 font-mono text-sm text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-white/5 dark:text-white dark:ring-white/10 dark:focus:ring-indigo-500";
-
 /** Jellyfin URL and API key, with a connection test. */
 export default function JellyfinFields({
   saved,
@@ -51,30 +48,27 @@ export default function JellyfinFields({
   };
 
   return (
-    <fieldset className="mt-8 border-t border-gray-200 pt-6 dark:border-white/10">
+    <fieldset className="border-t border-line pt-5">
       <legend className="sr-only">Jellyfin</legend>
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold dark:text-white">Jellyfin</h4>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Jellyfin library refresh</h3>
         <span
-          className={`text-xs font-medium ${
+          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
             saved?.enabled
-              ? "text-green-600 dark:text-green-400"
-              : "text-gray-500 dark:text-gray-400"
+              ? "border-ok/40 text-ok"
+              : "border-line-strong text-muted"
           }`}
         >
           {saved?.enabled ? "On" : "Off"}
         </span>
       </div>
-      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      <p className="help mt-1">
         After downloads finish, urtube asks Jellyfin to scan its libraries so
         new songs show up right away. Create an API key in Jellyfin under
         Dashboard → API Keys.
       </p>
 
-      <label
-        htmlFor="jellyfinUrl"
-        className="mt-4 block text-sm font-medium dark:text-gray-300"
-      >
+      <label htmlFor="jellyfinUrl" className="label mt-4">
         Server URL
       </label>
       <input
@@ -88,13 +82,10 @@ export default function JellyfinFields({
           setResult(null);
         }}
         placeholder="http://192.168.1.10:8096"
-        className={inputClass}
+        className="input mt-1.5 font-mono"
       />
 
-      <label
-        htmlFor="jellyfinKey"
-        className="mt-4 block text-sm font-medium dark:text-gray-300"
-      >
+      <label htmlFor="jellyfinKey" className="label mt-4">
         API key
       </label>
       <input
@@ -110,28 +101,24 @@ export default function JellyfinFields({
         placeholder={
           canUseSavedKey ? "Saved: leave empty to keep it" : "Paste the key"
         }
-        className={inputClass}
+        className="input mt-1.5 font-mono"
       />
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
           onClick={test}
           disabled={
             testing || !url.trim() || !(apiKey.trim() || canUseSavedKey)
           }
-          className="rounded-lg px-3 py-1.5 text-sm font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-500/30 hover:bg-indigo-50 disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-white/5"
+          className="btn btn-secondary"
         >
           {testing ? "Testing…" : "Test connection"}
         </button>
         {result && (
           <span
             role="status"
-            className={`text-xs ${
-              result.ok
-                ? "text-green-600 dark:text-green-400"
-                : "text-red-600 dark:text-red-400"
-            }`}
+            className={`text-xs ${result.ok ? "text-ok" : "text-danger"}`}
           >
             {result.text}
           </span>
