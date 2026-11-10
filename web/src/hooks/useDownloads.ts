@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from "react";
+import { useCallback, useReducer, useState } from "react";
 import * as api from "../api";
 import { downloadsReducer } from "../downloads";
 import { useDownloadEvents } from "./useDownloadEvents";
@@ -10,10 +10,15 @@ import { useDownloadEvents } from "./useDownloadEvents";
 export function useDownloads() {
   const [downloads, dispatch] = useReducer(downloadsReducer, {});
 
-  const onEvent = useCallback(
-    (event: api.DownloadEvent) => dispatch({ type: "event", event }),
-    [],
-  );
+  // The latest outcome worth telling a screen reader user about.
+  const [announcement, setAnnouncement] = useState("");
+
+  const onEvent = useCallback((event: api.DownloadEvent) => {
+    dispatch({ type: "event", event });
+    const title = event.title || "Untitled";
+    if (event.status === "finished") setAnnouncement(`Downloaded ${title}`);
+    if (event.status === "error") setAnnouncement(`Download failed: ${title}`);
+  }, []);
   useDownloadEvents(onEvent);
 
   /** Starts a download; rejects with the server's message if it refuses. */
@@ -40,5 +45,5 @@ export function useDownloads() {
     [],
   );
 
-  return { downloads, start, cancel, dismiss };
+  return { downloads, announcement, start, cancel, dismiss };
 }
