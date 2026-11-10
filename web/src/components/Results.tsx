@@ -225,9 +225,11 @@ function Actions({
   const [Icon, label, style] =
     download?.status === "finished"
       ? [CheckIcon, "Downloaded", "btn-secondary text-ok"]
-      : download?.status === "error"
-        ? [ArrowPathIcon, "Retry", "btn-secondary text-danger"]
-        : [ArrowDownTrayIcon, "Download", "btn-primary"];
+      : download?.status === "skipped"
+        ? [CheckIcon, "In library", "btn-secondary text-ok"]
+        : download?.status === "error"
+          ? [ArrowPathIcon, "Retry", "btn-secondary text-danger"]
+          : [ArrowDownTrayIcon, "Download", "btn-primary"];
   const compactSize = compact ? "max-sm:w-11 max-sm:px-0" : "flex-1";
 
   return (
@@ -238,9 +240,11 @@ function Actions({
         title={
           download?.status === "finished"
             ? "Downloaded. Download again, for example in another format"
-            : download?.status === "error"
-              ? download.errorMessage || "Download failed"
-              : undefined
+            : download?.status === "skipped"
+              ? download.errorMessage || "Already in your library"
+              : download?.status === "error"
+                ? download.errorMessage || "Download failed"
+                : undefined
         }
         className={`btn ${style} ${compactSize}`}
       >

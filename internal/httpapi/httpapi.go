@@ -35,6 +35,12 @@ type Suggester interface {
 	Suggest(ctx context.Context, url string) (media.Suggestion, error)
 }
 
+// Library reports what the download folder already holds.
+// *media.LibraryService implements it.
+type Library interface {
+	Check(mediaType media.MediaType, items []media.Tags) ([]media.LibraryMatch, error)
+}
+
 // Settings reads and changes the settings users edit in the app.
 // *settings.Store implements it.
 type Settings interface {
@@ -59,6 +65,7 @@ type Deps struct {
 	Search    Searcher
 	Downloads Downloads
 	Suggest   Suggester
+	Library   Library
 	Settings  Settings
 	// CheckJellyfin tests a Jellyfin URL and API key, describing the server
 	// or explaining what's wrong.
@@ -126,6 +133,7 @@ func newRouter(a *api) http.Handler {
 			r.Use(middleware.RequestSize(maxRequestBody))
 			r.Get("/search/{query}", handle(a.search))
 			r.Get("/tags", handle(a.suggestTags))
+			r.Post("/library/matches", handle(a.libraryMatches))
 			r.Post("/download", handle(a.startDownload))
 			r.Delete("/download/{id}", handle(a.cancelDownload))
 			r.Get("/settings", handle(a.getSettings))

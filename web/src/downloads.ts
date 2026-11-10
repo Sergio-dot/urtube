@@ -11,7 +11,10 @@ export interface Download {
   videoId: string;
   title: string;
   status: DownloadStatus;
+  /** Why the download failed or was skipped. */
   errorMessage?: string;
+  /** Library files that may be the same song. */
+  similar?: string[];
   percent: string;
   speed: string;
   eta: string;
@@ -92,12 +95,14 @@ export function downloadsReducer(
 }
 
 // Which download a video's card shows when it has several: one in progress
-// (so it can be cancelled), else a finished one, else the latest failure.
+// (so it can be cancelled), else one that is in the library (finished, or
+// skipped because it already was), else the latest failure.
 const priority: Record<DownloadStatus, number> = {
   starting: 3,
   queued: 3,
   downloading: 3,
   finished: 2,
+  skipped: 2,
   error: 1,
   cancelled: 0,
 };

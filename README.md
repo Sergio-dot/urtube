@@ -91,6 +91,20 @@ SponsorBlock users marked as non-music (intros, skits), when the
 SponsorBlock API is reachable. File names avoid characters Windows and SMB
 shares reject (`AC/DC` is saved as `AC⧸DC`).
 
+**Songs you already have.** Existing files are never overwritten or
+re-tagged. A download whose file is already in the library (same folder and
+title, ignoring case, in any format of the same type) is shown as
+*Skipped*, and so is a second download of the same file while the first is
+running. Before you start, the download dialog warns about such a file and
+lists the artist's songs with similar titles, such as "Song (Live)" or
+"Song - Remastered", which are still downloaded because they may be the
+version you want. With several videos selected, songs from a Music search
+are checked up front: files already in the library are unticked, similar
+ones stay ticked. Other videos are checked when their download runs. A
+download that finished despite similar songs in the library lists them in
+the Downloads panel. The **Start download** button waits for the MusicBrainz
+album lookup, so a song is never saved under tags you didn't see.
+
 **Jellyfin.** In Settings, enter your Jellyfin server's URL and an API key
 (Jellyfin: Dashboard → API Keys), check them with **Test connection**, and
 save. urtube then asks Jellyfin to scan its libraries once a batch of

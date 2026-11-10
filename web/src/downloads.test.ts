@@ -3,6 +3,7 @@ import type { DownloadEvent, Video } from "./api";
 import {
   downloadsByVideo,
   downloadsReducer,
+  isTerminal,
   type Download,
   type DownloadStatus,
   type Downloads,
@@ -144,6 +145,19 @@ describe("downloadsByVideo", () => {
     expect(
       pick(download("a", "error"), download("b", "cancelled")).v1.uuid,
     ).toBe("a");
+  });
+
+  it("treats skipped as in the library, like finished", () => {
+    expect(pick(download("a", "skipped"), download("b", "error")).v1.uuid).toBe(
+      "a",
+    );
+    expect(
+      pick(download("a", "finished"), download("b", "skipped")).v1.uuid,
+    ).toBe("b");
+  });
+
+  it("skipped has ended, so it can be dismissed", () => {
+    expect(isTerminal("skipped")).toBe(true);
   });
 
   it("shows the newest of equally relevant downloads", () => {

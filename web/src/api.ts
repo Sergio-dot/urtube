@@ -73,7 +73,9 @@ export type ServerStatus =
   | "downloading"
   | "finished"
   | "error"
-  | "cancelled";
+  | "cancelled"
+  /** Not downloaded: the library already has it, or another download is saving it. */
+  | "skipped";
 
 /**
  * One message on the event stream. Progress values are preformatted for
@@ -84,12 +86,23 @@ export interface DownloadEvent {
   videoId: string;
   title: string;
   status: ServerStatus;
+  /** Why the download failed or was skipped. */
   errorMessage?: string;
+  /** Library files, relative to the download folder, that may be the same song. */
+  similar?: string[];
   percent: string;
   speed: string;
   eta: string;
   downloaded: string;
   total: string;
+}
+
+/** What the library already holds that a download would duplicate. */
+export interface LibraryMatch {
+  /** The file the download would be skipped for, relative to the download folder. */
+  existing?: string;
+  /** Files that may be the same song, most similar first. */
+  similar?: string[];
 }
 
 export interface Health {
@@ -206,6 +219,28 @@ export function suggestTags(
   return request<TagSuggestion>(`/tags?${new URLSearchParams({ url })}`, {
     signal,
   });
+}
+
+/**
+ * Checks what the library already holds that downloading each of items as
+ * type would duplicate, in the same order. Advisory: downloads check again
+ * when they run.
+ */
+export async function checkLibrary(
+  type: MediaType,
+  items: Tags[],
+  signal?: AbortSignal,
+): Promise<LibraryMatch[]> {
+  const { matches } = await request<{ matches: LibraryMatch[] }>(
+    "/library/matches",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, items }),
+      signal,
+    },
+  );
+  return matches;
 }
 
 export async function cancelDownload(id: string): Promise<void> {

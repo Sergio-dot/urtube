@@ -1,5 +1,6 @@
 import {
   CheckCircleIcon,
+  DocumentDuplicateIcon,
   ExclamationCircleIcon,
   MinusCircleIcon,
   XMarkIcon,
@@ -7,6 +8,7 @@ import {
 import type { Video } from "../api";
 import { isActive, isTerminal, type Download } from "../downloads";
 import { percentValue } from "../format";
+import { libraryPath } from "../library";
 
 interface ActivityPanelProps {
   /** Newest first. */
@@ -156,6 +158,8 @@ function statusLine(d: Download): string {
       return d.errorMessage || "Failed";
     case "cancelled":
       return "Cancelled";
+    case "skipped":
+      return d.errorMessage || "Skipped: already in the library";
     case "queued":
       return "Waiting for a free slot";
     case "starting":
@@ -206,6 +210,12 @@ function DownloadItem({
             className="mt-3 size-5 shrink-0 text-muted"
           />
         )}
+        {status === "skipped" && (
+          <DocumentDuplicateIcon
+            aria-hidden="true"
+            className="mt-3 size-5 shrink-0 text-muted"
+          />
+        )}
         <div className="min-w-0 flex-1 py-2">
           <p className="truncate text-sm font-medium" title={title}>
             {title}
@@ -214,11 +224,22 @@ function DownloadItem({
             className={`text-xs tabular-nums ${
               status === "error"
                 ? "break-words text-danger"
-                : "truncate text-muted"
+                : status === "skipped"
+                  ? "break-words text-muted"
+                  : "truncate text-muted"
             }`}
           >
             {statusLine(download)}
           </p>
+          {/* Only a hint: the download went ahead, and the user decides. */}
+          {status !== "skipped" && download.similar?.length ? (
+            <p className="mt-1 text-xs break-words text-muted">
+              <span className="font-medium text-warn">
+                You may already have this song:
+              </span>{" "}
+              {download.similar.map(libraryPath).join(", ")}
+            </p>
+          ) : null}
         </div>
         {percent !== undefined && (
           <span className="py-2 text-sm font-semibold tabular-nums">

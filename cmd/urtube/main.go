@@ -112,6 +112,7 @@ func run() error {
 		Search:    media.NewSearchService(&ytdlp.Searcher{}),
 		Downloads: downloads,
 		Suggest:   suggest,
+		Library:   media.NewLibraryService(store),
 		Settings:  store,
 		CheckJellyfin: func(ctx context.Context, url, apiKey string) (string, error) {
 			return jellyfin.Client{URL: url, APIKey: apiKey}.Check(ctx)

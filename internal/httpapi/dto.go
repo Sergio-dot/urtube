@@ -60,6 +60,27 @@ type suggestionResponse struct {
 	KnownArtists []string `json:"knownArtists"`
 }
 
+// libraryMatchesRequest asks what the library holds that downloading each
+// of Items as Type would duplicate.
+type libraryMatchesRequest struct {
+	Type  string    `json:"type"`
+	Items []tagsDTO `json:"items"`
+}
+
+// libraryMatchResponse describes one item of a libraryMatchesRequest. Paths
+// are relative to the download folder.
+type libraryMatchResponse struct {
+	// Existing is the file the download would be skipped for.
+	Existing string `json:"existing,omitempty"`
+	// Similar are files that may be the same song.
+	Similar []string `json:"similar,omitempty"`
+}
+
+type libraryMatchesResponse struct {
+	// Matches are in the order of the request's items.
+	Matches []libraryMatchResponse `json:"matches"`
+}
+
 type downloadResponse struct {
 	UUID    string `json:"uuid"`
 	Message string `json:"message"`
@@ -146,16 +167,20 @@ type settingsResponse struct {
 // downloadEvent is one message on the event stream. Progress values are
 // preformatted for display and empty when unknown.
 type downloadEvent struct {
-	UUID         string `json:"uuid"`
-	VideoID      string `json:"videoId"`
-	Title        string `json:"title"`
-	Status       string `json:"status"`
+	UUID    string `json:"uuid"`
+	VideoID string `json:"videoId"`
+	Title   string `json:"title"`
+	Status  string `json:"status"`
+	// ErrorMessage says why the download failed or was skipped.
 	ErrorMessage string `json:"errorMessage,omitempty"`
-	Percent      string `json:"percent"`
-	Speed        string `json:"speed"`
-	ETA          string `json:"eta"`
-	Downloaded   string `json:"downloaded"`
-	Total        string `json:"total"`
+	// Similar lists library files, relative to the download folder, that
+	// may be the same song.
+	Similar    []string `json:"similar,omitempty"`
+	Percent    string   `json:"percent"`
+	Speed      string   `json:"speed"`
+	ETA        string   `json:"eta"`
+	Downloaded string   `json:"downloaded"`
+	Total      string   `json:"total"`
 }
 
 func newDownloadEvent(d media.Download) downloadEvent {
@@ -165,6 +190,7 @@ func newDownloadEvent(d media.Download) downloadEvent {
 		Title:        d.Title,
 		Status:       string(d.Status),
 		ErrorMessage: d.Error,
+		Similar:      d.Similar,
 	}
 
 	p := d.Progress

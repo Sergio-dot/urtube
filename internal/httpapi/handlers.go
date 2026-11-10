@@ -50,6 +50,35 @@ func (a *api) suggestTags(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// libraryMatches handles POST /api/v1/library/matches: what the library
+// already holds that downloading each of the given songs would duplicate.
+// It is a POST because a batch of tags doesn't fit in a URL; it changes
+// nothing.
+func (a *api) libraryMatches(w http.ResponseWriter, r *http.Request) error {
+	var body libraryMatchesRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return statusError{status: http.StatusBadRequest, msg: "invalid request body"}
+	}
+
+	items := make([]media.Tags, len(body.Items))
+	for i, t := range body.Items {
+		items[i] = t.toMedia()
+	}
+	matches, err := a.Library.Check(media.MediaType(body.Type), items)
+	if err != nil {
+		return err
+	}
+
+	resp := libraryMatchesResponse{Matches: make([]libraryMatchResponse, len(matches))}
+	for i, m := range matches {
+		resp.Matches[i] = libraryMatchResponse(m)
+	}
+	writeJSON(w, http.StatusOK, resp)
+	return nil
+}
+
 // startDownload handles POST /api/v1/download.
 func (a *api) startDownload(w http.ResponseWriter, r *http.Request) error {
 	var body downloadRequest
