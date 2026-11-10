@@ -80,7 +80,11 @@ function App() {
     setShowSettings(true);
   }, []);
 
-  const confirmDownload = async (options: DownloadOptions, tags?: Tags) => {
+  const confirmDownload = async (
+    options: DownloadOptions,
+    videos: Video[],
+    tags?: Tags,
+  ) => {
     if (!pending) return;
     setPreferences(options);
     setFailure(null);
@@ -88,14 +92,12 @@ function App() {
 
     // One at a time, so the server queues them in the order shown.
     const failures: string[] = [];
-    for (const video of pending.videos) {
+    for (const video of videos) {
       try {
         await start(video, options, tags);
       } catch (err) {
         const reason = err instanceof Error ? err.message : "unknown error";
-        failures.push(
-          pending.videos.length > 1 ? `${video.title}: ${reason}` : reason,
-        );
+        failures.push(videos.length > 1 ? `${video.title}: ${reason}` : reason);
       }
     }
     if (failures.length > 0) {

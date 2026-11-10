@@ -3,6 +3,7 @@ package media
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,9 +35,12 @@ type DownloadService struct {
 	running     int
 	nextSeq     uint64
 	subscribers map[chan Download]struct{}
-	draining    bool
-	closed      bool
-	inFlight    sync.WaitGroup
+	// saving holds the files running downloads will save, by pathKey, so
+	// two downloads of the same song can't both write it.
+	saving   map[string]struct{}
+	draining bool
+	closed   bool
+	inFlight sync.WaitGroup
 	// changed is set when a download finishes and cleared when the library
 	// is notified.
 	changed bool
@@ -78,6 +82,7 @@ func NewDownloadService(fetcher Fetcher, destination Destination, maxConcurrent 
 		maxConcurrent: max(maxConcurrent, 1),
 		jobs:          make(map[string]*job),
 		subscribers:   make(map[chan Download]struct{}),
+		saving:        make(map[string]struct{}),
 	}
 }
 
@@ -144,10 +149,13 @@ func (s *DownloadService) run(j *job) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var skip skipError
 	switch {
 	// Check the context first: a cancelled fetch also returns an error.
 	case j.ctx.Err() != nil:
 		s.finishLocked(j, StatusCancelled, "")
+	case errors.As(err, &skip):
+		s.finishLocked(j, StatusSkipped, string(skip))
 	case err != nil:
 		s.finishLocked(j, StatusError, err.Error())
 	default:
@@ -183,6 +191,26 @@ func (s *DownloadService) fetch(j *job) error {
 		TrimNonMusic: audio,
 	}
 
+	// Claimed before looking at the library, so a download that finishes
+	// in between has either released the claim or already saved its file.
+	release, ok := s.claim(j.dir, job.Path)
+	if !ok {
+		return skipError("Another download is already saving " + displayPath(job.Path))
+	}
+	defer release()
+	match := checkPath(lib, job.Path, j.req.Options.Type)
+	if match.Existing != "" {
+		// yt-dlp would not replace it: it would rewrite the existing file's
+		// tags and cover with this video's, keeping the old audio.
+		return skipError("Already in your library: " + match.Existing)
+	}
+	if len(match.Similar) > 0 {
+		s.mu.Lock()
+		j.state.Similar = match.Similar
+		s.publishLocked(j.state)
+		s.mu.Unlock()
+	}
+
 	return s.fetcher.Fetch(j.ctx, job, func(p Progress) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -192,6 +220,45 @@ func (s *DownloadService) fetch(j *job) error {
 		j.state.Progress = p
 		s.publishLocked(j.state)
 	})
+}
+
+// skipError ends a download as StatusSkipped instead of fetching it. Its
+// message is shown to the user.
+type skipError string
+
+func (e skipError) Error() string { return string(e) }
+
+// claim reserves the file at path in dir (see PlanPath) for one download,
+// whatever its format and however its name is capitalised. ok is false if
+// another download holds it; otherwise call release once the file is saved
+// or the download has given up.
+func (s *DownloadService) claim(dir string, path []string) (release func(), ok bool) {
+	key := pathKey(dir, path)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, taken := s.saving[key]; taken {
+		return nil, false
+	}
+	s.saving[key] = struct{}{}
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.saving, key)
+	}, true
+}
+
+// pathKey identifies a file in the library the way findExisting matches it.
+func pathKey(dir string, path []string) string {
+	parts := make([]string, len(path))
+	for i, p := range path {
+		parts[i] = strings.ToLower(folderKey(p))
+	}
+	return dir + "\x00" + strings.Join(parts, "/")
+}
+
+// displayPath formats path components (see PlanPath) for messages.
+func displayPath(path []string) string {
+	return strings.Join(path, "/")
 }
 
 // finishLocked moves j to a terminal status, frees its slot if it was running

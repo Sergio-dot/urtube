@@ -135,11 +135,14 @@ const (
 	StatusFinished    Status = "finished"
 	StatusError       Status = "error"
 	StatusCancelled   Status = "cancelled"
+	// StatusSkipped means nothing was downloaded because the library
+	// already has the file, or another download is saving it.
+	StatusSkipped Status = "skipped"
 )
 
 // Terminal reports whether the download has ended.
 func (s Status) Terminal() bool {
-	return s == StatusFinished || s == StatusError || s == StatusCancelled
+	return s == StatusFinished || s == StatusError || s == StatusCancelled || s == StatusSkipped
 }
 
 // Progress describes how far a running download has got. Zero values mean
@@ -168,8 +171,12 @@ type Download struct {
 	Title    string
 	Status   Status
 	Progress Progress
-	// Error describes why the download failed when Status is StatusError.
+	// Error describes why the download failed (StatusError) or was skipped
+	// (StatusSkipped).
 	Error string
+	// Similar lists files in the library, relative to it, that may be the
+	// same song. It is set once the download's location is known.
+	Similar []string
 }
 
 // VideoSource finds videos.

@@ -120,6 +120,9 @@ func newTestRouter(t *testing.T, deps Deps) http.Handler {
 	if deps.Suggest == nil {
 		deps.Suggest = &fakeSuggester{}
 	}
+	if deps.Library == nil {
+		deps.Library = &fakeLibrary{}
+	}
 	if deps.Downloads == nil {
 		svc := media.NewDownloadService(blockingFetcher{}, &fakeSettings{}, 2)
 		t.Cleanup(func() { drainNow(svc) })
@@ -432,6 +435,80 @@ func TestNewDownloadEvent(t *testing.T) {
 	t.Run("errors carry the message", func(t *testing.T) {
 		e := newDownloadEvent(media.Download{Status: media.StatusError, Error: "Video unavailable"})
 		assert.Equal(t, "Video unavailable", e.ErrorMessage)
+	})
+
+	t.Run("skipped downloads carry the reason and similar songs are listed", func(t *testing.T) {
+		e := newDownloadEvent(media.Download{Status: media.StatusSkipped, Error: "Already in your library: A/Song.mp3"})
+		assert.Equal(t, "skipped", e.Status)
+		assert.Equal(t, "Already in your library: A/Song.mp3", e.ErrorMessage)
+		assert.Empty(t, e.Percent)
+
+		e = newDownloadEvent(media.Download{Status: media.StatusFinished, Similar: []string{"A/Song (Live).mp3"}})
+		assert.Equal(t, []string{"A/Song (Live).mp3"}, e.Similar)
+	})
+}
+
+// fakeLibrary records what it was asked to check and returns matches.
+type fakeLibrary struct {
+	matches []media.LibraryMatch
+	err     error
+
+	gotType  media.MediaType
+	gotItems []media.Tags
+}
+
+func (f *fakeLibrary) Check(mediaType media.MediaType, items []media.Tags) ([]media.LibraryMatch, error) {
+	f.gotType, f.gotItems = mediaType, items
+	return f.matches, f.err
+}
+
+func TestLibraryMatches(t *testing.T) {
+	t.Run("returns a match per item", func(t *testing.T) {
+		lib := &fakeLibrary{matches: []media.LibraryMatch{
+			{},
+			{Existing: "Queen/Song.mp3", Similar: []string{"Queen/Live/Song (Live).mp3"}},
+		}}
+		h := newTestRouter(t, Deps{Library: lib})
+
+		w := do(h, http.MethodPost, "/api/v1/library/matches", `{
+			"type": "audio",
+			"items": [{"artist": "A", "title": "New", "album": ""}, {"artist": "Queen", "title": "Song", "album": ""}]
+		}`)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"matches": [
+			{},
+			{"existing": "Queen/Song.mp3", "similar": ["Queen/Live/Song (Live).mp3"]}
+		]}`, w.Body.String())
+		assert.Equal(t, media.MediaAudio, lib.gotType)
+		assert.Equal(t, []media.Tags{{Artist: "A", Title: "New"}, {Artist: "Queen", Title: "Song"}}, lib.gotItems)
+	})
+
+	t.Run("no items is an empty list", func(t *testing.T) {
+		h := newTestRouter(t, Deps{Library: &fakeLibrary{matches: []media.LibraryMatch{}}})
+		w := do(h, http.MethodPost, "/api/v1/library/matches", `{"type": "video", "items": []}`)
+		assert.JSONEq(t, `{"matches": []}`, w.Body.String())
+	})
+
+	t.Run("errors", func(t *testing.T) {
+		tests := []struct {
+			name string
+			err  error
+			body string
+			want int
+		}{
+			{"malformed body", nil, `{"type": "audio", "items": "x"}`, http.StatusBadRequest},
+			{"unknown field", nil, `{"type": "audio", "items": [], "force": true}`, http.StatusBadRequest},
+			{"invalid input", media.ErrInvalidMediaType, `{"type": "podcast", "items": []}`, http.StatusBadRequest},
+			{"unusable folder", media.ErrDownloadDirUnavailable, `{"type": "audio", "items": []}`, http.StatusServiceUnavailable},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				h := newTestRouter(t, Deps{Library: &fakeLibrary{err: tt.err}})
+				w := do(h, http.MethodPost, "/api/v1/library/matches", tt.body)
+				assert.Equal(t, tt.want, w.Code)
+			})
+		}
 	})
 }
 
